@@ -23,6 +23,18 @@ from ui.tabs.priorities import render_priorities_tab
 from ui.tabs.role_view import render_role_tab
 from ui.tabs.task_detail import render_task_detail_tab
 
+REQUIRED_COLUMNS = {
+    "timestamp", "changed_value", "added_values", "removed_values", "author_full_name"
+}
+OPTIONAL_COLUMNS = {"issue_id", "iissue_id", "activity_type"}
+
+def validate_csv_schema(df: pd.DataFrame, filename: str) -> tuple[bool, list[str]]:
+    """Проверяет наличие обязательных колонок в CSV. Возвращает (is_valid, errors)."""
+    missing = REQUIRED_COLUMNS - set(df.columns)
+    if missing:
+        return False, [f"{filename}: отсутствуют обязательные колонки: {', '.join(sorted(missing))}"]
+    return True, []
+
 st.set_page_config(page_title="Team Process Analytics", page_icon="📊", layout="wide")
 st.title("📊 Комплексный процессный аудит команды")
 
@@ -45,6 +57,7 @@ uploaded_files = st.file_uploader("Загрузите CSV-файлы журна�
 
 if uploaded_files:
     dfs = []
+    validation_errors = []
     for f in uploaded_files:
         f.seek(0)
         try:
@@ -52,8 +65,19 @@ if uploaded_files:
         except Exception:
             f.seek(0)
             df_temp = pd.read_csv(f, sep=None, engine="python", on_bad_lines="skip")
+        
+        is_valid, errors = validate_csv_schema(df_temp, f.name)
+        if not is_valid:
+            validation_errors.extend(errors)
+            continue
+        
         df_temp["task_identifier"] = df_temp.get("issue_id", df_temp.get("iissue_id", f.name.replace(".csv", "")))
         dfs.append(df_temp)
+    
+    if validation_errors:
+        for err in validation_errors:
+            st.error(err)
+        st.stop()
 
     full_raw_df = pd.concat(dfs, ignore_index=True)
     full_raw_df["timestamp"] = pd.to_datetime(full_raw_df["timestamp"])

@@ -1,12 +1,23 @@
 """config.py — Централизованное хранилище констант, статусов и настроек."""
+import json
+from pathlib import Path
 
-# Профильная команда QA
-CORE_QA_TEAM = [
-    "Крохалева Татьяна Владимировна",
-    "Митрофанов Артём",
-    "Стрелок Наталья Владимировна",
-    "Островская Татьяна Евгеньевна",
-]
+CONFIG_DIR = Path(__file__).resolve().parent / "config"
+
+def _load_qa_team() -> list[str]:
+    team_file = CONFIG_DIR / "team.json"
+    if team_file.exists():
+        with open(team_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            return data.get("core_qa_team", [])
+    return [
+        "Крохалева Татьяна Владимировна",
+        "Митрофанов Артём",
+        "Стрелок Наталья Владимировна",
+        "Островская Татьяна Евгеньевна",
+    ]
+
+CORE_QA_TEAM = _load_qa_team()
 
 MONTH_NAMES_RU = {
     1: "Январь", 2: "Февраль", 3: "Март", 4: "Апрель",

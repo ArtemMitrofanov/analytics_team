@@ -1,0 +1,36 @@
+[project]
+name = "team-process-analytics"
+version = "1.0.0"
+description = "Комплексный процессный аудит команды — сквозная аналитика задач"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "pandas==2.2.2",
+    "numpy==1.26.4",
+    "streamlit==1.37.0",
+    "plotly==5.22.0",
+    "crewai==0.30.0",
+]
+
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_functions = "test_*"
+addopts = "-v --tb=short"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+select = ["E", "F", "I", "UP", "W"]
+ignore = ["E501", "UP006"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+ignore_missing_imports = true
