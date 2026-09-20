@@ -26,6 +26,7 @@ def _init_schema(conn: duckdb.DuckDBPyConnection) -> None:
             added_values VARCHAR,
             removed_values VARCHAR,
             author_full_name VARCHAR,
+            activity_type VARCHAR,
             source_file VARCHAR NOT NULL,
             file_hash VARCHAR NOT NULL,
             row_hash VARCHAR NOT NULL,
@@ -100,11 +101,15 @@ def load_dataframe_to_db(df: pd.DataFrame, source_file: str, file_hash: str) -> 
     if "timestamp" in df.columns:
         df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
 
+    # Добавляем activity_type если нет
+    if "activity_type" not in df.columns:
+        df["activity_type"] = ""
+
     # Выбор нужных колонок
     cols = [
         "task_id", "timestamp", "changed_value", "added_values",
-        "removed_values", "author_full_name", "source_file",
-        "file_hash", "row_hash"
+        "removed_values", "author_full_name", "activity_type",
+        "source_file", "file_hash", "row_hash"
     ]
     df = df[cols].dropna(subset=["task_id", "timestamp", "changed_value"])
 
@@ -117,9 +122,9 @@ def load_dataframe_to_db(df: pd.DataFrame, source_file: str, file_hash: str) -> 
     result = conn.execute("""
         INSERT OR IGNORE INTO task_events 
         (task_id, timestamp, changed_value, added_values, removed_values,
-         author_full_name, source_file, file_hash, row_hash)
+         author_full_name, activity_type, source_file, file_hash, row_hash)
         SELECT task_id, timestamp, changed_value, added_values, removed_values,
-               author_full_name, source_file, file_hash, row_hash
+               author_full_name, activity_type, source_file, file_hash, row_hash
         FROM df
     """)
     # DuckDB возвращает количество вставленных строк через fetchall()[0][0]
