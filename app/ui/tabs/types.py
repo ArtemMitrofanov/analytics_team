@@ -3,10 +3,9 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 from utils.stats import calc_stats
-from ui.components import render_ai_audit_button
 
 
-def render_types_tab(summary_df: pd.DataFrame, gemini_key: str = ""):
+def render_types_tab(summary_df: pd.DataFrame):
     st.subheader("🐞 Анализ структуры потока: Дефекты (Bugs) vs Фичи / Задачи (Tasks)")
     st.caption("Оценка баланса создания новой ценности (Value Demand) и устранения дефектов (Failure Demand)")
 
@@ -111,16 +110,3 @@ def render_types_tab(summary_df: pd.DataFrame, gemini_key: str = ""):
 
     csv_types_exp = filtered_types_df[valid_cols].to_csv(index=False).encode("utf-8-sig")
     st.download_button("📥 Скачать реестр по типам задач (CSV)", csv_types_exp, "tasks_by_type.csv", "text/csv")
-
-    render_ai_audit_button(
-        button_label="ИИ-аудит баланса дефектов и фичей",
-        key_suffix="types",
-        agent_role="Product Quality & Flow Strategist",
-        agent_goal="Снизить долю Failure Demand (багов) и освободить ресурс команды под разработку фичей (Value Demand)",
-        context_prompt=(
-            f"Структура потока работ команды:\n"
-            f"- Доля багов (Failure Demand): {bug_pct:.1f}% ({bug_cnt} шт), Lead Time ср = {bug_lt_m:.1f} д. (P85 = {bug_lt_p85:.1f} д.)\n"
-            f"- Доля фичей (Value Demand): {feat_pct:.1f}% ({feat_cnt} шт), Lead Time ср = {feat_lt_m:.1f} д. (P85 = {feat_lt_p85:.1f} д.)"
-        ),
-        gemini_key=gemini_key
-    )

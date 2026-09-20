@@ -4,15 +4,13 @@ import plotly.express as px
 import streamlit as st
 from config import TSHIRT_ORDER, CORE_QA_TEAM, CORE_DEV_TEAM, CORE_ANALYTICS_TEAM
 from utils.stats import calc_stats
-from ui.components import render_ai_audit_button
 
 
 def render_estimates_tab(
     summary_df: pd.DataFrame,
     qa_iter_df: pd.DataFrame,
     dev_iter_df: pd.DataFrame,
-    an_iter_df: pd.DataFrame,
-    gemini_key: str = ""
+    an_iter_df: pd.DataFrame
 ):
     st.subheader("🎯 Анализ точности и калибровка оценок задач (T-Shirt Sizes)")
     st.caption("Сопоставление плановых и фактических размеров (XS, S, M, L, XL) и калибровка фактическими рабочими днями")
@@ -174,17 +172,3 @@ def render_estimates_tab(
 
     csv_est_exp = tbl_est.to_csv(index=False).encode("utf-8-sig")
     st.download_button("📥 Скачать реестр оценок (CSV)", csv_est_exp, "task_estimations.csv", "text/csv")
-
-    render_ai_audit_button(
-        button_label="ИИ-аудит качества и точности оценок",
-        key_suffix="estimates",
-        agent_role="Estimation & Planning Coach",
-        agent_goal="Оценить риски недооценки сложности (Underestimation) и дать правила калибровки T-Shirt оценок",
-        context_prompt=(
-            f"Статистика точности эстимации T-Shirt Sizes (XS, S, M, L, XL):\n"
-            f"- Точность (План=Факт): {avg_acc:.1f}%\n"
-            f"- Доля недооцененных задач (Факт > План): {avg_under:.1f}%\n"
-            f"- Задач с оценкой разработки: {tot_d}, QA: {tot_q}, Аналитики: {tot_a}"
-        ),
-        gemini_key=gemini_key
-    )

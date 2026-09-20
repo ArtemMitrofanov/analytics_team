@@ -2,10 +2,9 @@
 import pandas as pd
 import plotly.express as px
 import streamlit as st
-from ui.components import render_ai_audit_button
 
 
-def render_deadlines_tab(summary_df: pd.DataFrame, gemini_key: str = ""):
+def render_deadlines_tab(summary_df: pd.DataFrame):
     st.subheader("⏰ Контроль выполнения обязательств и дедлайнов (SLA)")
     st.caption("Анализ соблюдения сроков заказчика, частоты переносов дедлайнов (Slippage) и просрочек")
 
@@ -113,21 +112,5 @@ def render_deadlines_tab(summary_df: pd.DataFrame, gemini_key: str = ""):
 
         csv_dl_exp = display_dl_df[valid_cols].to_csv(index=False).encode("utf-8-sig")
         st.download_button("📥 Скачать реестр дедлайнов (CSV)", csv_dl_exp, "task_deadlines_sla.csv", "text/csv")
-
-        render_ai_audit_button(
-            button_label="ИИ-аудит выполнения дедлайнов (SLA)",
-            key_suffix="deadlines",
-            agent_role="SLA & Release Commitment Manager",
-            agent_goal="Оценить причины систематических переносов сроков и предложить механизм защиты дедлайнов",
-            context_prompt=(
-                f"Метрики выполнения дедлайнов заказчика:\n"
-                f"- Задач с дедлайном: {total_with_dl}\n"
-                f"- On-Time Delivery: {on_time_pct:.1f}%\n"
-                f"- Просрочено: {overdue_pct:.1f}%\n"
-                f"- Задач с переносами дедлайна: {shifted_pct:.1f}%\n"
-                f"- Средний перенос: {avg_slippage:.1f} д. (макс: {max_slippage} д.)"
-            ),
-            gemini_key=gemini_key
-        )
     else:
         st.info("В выбранном периоде нет задач с заполненным полем «Дедлайн заказчика».")

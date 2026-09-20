@@ -4,10 +4,9 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 from config import ALL_TRACKED_STATUSES
-from ui.components import render_ai_audit_button
 
 
-def render_task_detail_tab(summary_df: pd.DataFrame, unique_tasks: Sequence[str], gemini_key: str = ""):
+def render_task_detail_tab(summary_df: pd.DataFrame, unique_tasks: Sequence[str]):
     if not list(unique_tasks):
         st.info("Нет доступных задач для детализации.")
         return
@@ -40,17 +39,3 @@ def render_task_detail_tab(summary_df: pd.DataFrame, unique_tasks: Sequence[str]
         st.plotly_chart(fig_task_pie, use_container_width=True, key=f"chart_task_pie_{selected_task}")
 
     status_breakdown = ", ".join([f"{lbl}: {val}д" for lbl, val in zip(task_status_labels, task_status_values)])
-    render_ai_audit_button(
-        button_label=f"ИИ-разбор задачи {selected_task}",
-        key_suffix=f"task_{selected_task}",
-        agent_role="Root Cause Investigator",
-        agent_goal="Найти первопричину задержки конкретной задачи и указать на самый узкий этап",
-        context_prompt=(
-            f"Досье задачи {selected_task}:\n"
-            f"- Тип: {task_info.get('Тип задачи', 'Не указан')}, Приоритет: {task_info.get('Приоритет', 'Не указан')}\n"
-            f"- Полный Lead Time: {task_info.get('Полный Lead Time (д.)', 0)} д., Очереди: {task_info.get('Всего очередей (д.)', 0)} д., Чистая работа: {task_info.get('Чистая работа (д.)', 0)} д.\n"
-            f"- Flow Efficiency: {task_info.get('Сквозной Flow Efficiency (%)', 0)}%\n"
-            f"- Распределение по статусам: {status_breakdown}"
-        ),
-        gemini_key=gemini_key
-    )

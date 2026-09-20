@@ -4,14 +4,12 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 from utils.stats import calc_stats
-from ui.components import render_ai_audit_button
 
 def render_periods_tab(
     monthly_sprints_list: List[Dict[str, Any]],
     quarter_list: List[Dict[str, Any]],
     full_raw_df: pd.DataFrame,
-    global_summary_df: pd.DataFrame,
-    gemini_key: str = ""
+    global_summary_df: pd.DataFrame
 ):
     st.subheader("📅 Сравнительный анализ периодов поставки")
     st.caption("Динамика сквозной воронки поставки и ключевых метрик по каждой роли")
@@ -174,16 +172,3 @@ def render_periods_tab(
             st.plotly_chart(fig_an_cmp, use_container_width=True, key="chart_periods_an_cmp")
     else:
         st.info("Недостаточно данных для построения сравнительного анализа.")
-
-    if not cmp_df.empty:
-        render_ai_audit_button(
-            button_label="ИИ-аудит динамики периодов",
-            key_suffix="periods",
-            agent_role="Agile Delivery Manager",
-            agent_goal="Оценить динамику изменений метрик от периода к периоду и дать рекомендации по стабилизации темпа поставки",
-            context_prompt=(
-                f"Сравнительная таблица динамики периодов ({compare_scale}):\n"
-                f"{cmp_df[['Период', 'Задач (шт)', 'Lead Time Ср (д.)', 'Lead Time P85 (д.)', 'Очереди Ср (д.)', 'Сквозной Flow (%)']].to_string(index=False)}"
-            ),
-            gemini_key=gemini_key
-        )

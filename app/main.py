@@ -40,12 +40,6 @@ st.title("📊 Комплексный процессный аудит коман
 
 with st.sidebar:
     st.header("⚙️ Параметры анализа")
-    gemini_key = st.text_input("Gemini API Key", type="password")
-    selected_model = st.selectbox(
-        "Модель Gemini:",
-        options=["gemini/gemini-3.6-flash", "gemini/gemini-3.5-flash", "gemini/gemini-3.5-pro"],
-        index=0
-    )
     work_start_h = st.number_input("Начало дня (час)", 0, 23, 9)
     work_end_h = st.number_input("Конец дня (час)", 0, 23, 18)
     deduct_hours = st.number_input("Обед + созвоны (часов)", 0.0, 8.0, 2.0)
@@ -178,22 +172,22 @@ if uploaded_files:
         ])
 
         with t_overview:
-            render_overview_tab(summary_df, gemini_key=gemini_key, net_day_hours=net_day_hours)
+            render_overview_tab(summary_df, net_day_hours=net_day_hours)
 
         with t_periods:
-            render_periods_tab(monthly_sprints_list, quarter_list, full_raw_df, global_summary_df, gemini_key=gemini_key)
+            render_periods_tab(monthly_sprints_list, quarter_list, full_raw_df, global_summary_df)
 
         with t_est:
-            render_estimates_tab(summary_df, qa_iter_df, dev_iter_df, an_iter_df, gemini_key=gemini_key)
+            render_estimates_tab(summary_df, qa_iter_df, dev_iter_df, an_iter_df)
 
         with t_deadlines:
-            render_deadlines_tab(summary_df, gemini_key=gemini_key)
+            render_deadlines_tab(summary_df)
 
         with t_types:
-            render_types_tab(summary_df, gemini_key=gemini_key)
+            render_types_tab(summary_df)
 
         with t_prio:
-            render_priorities_tab(summary_df, gemini_key=gemini_key)
+            render_priorities_tab(summary_df)
 
         with t_qa:
             render_role_tab(
@@ -207,11 +201,8 @@ if uploaded_files:
                 rev_df=pd.DataFrame(),
                 summary_df=summary_df,
                 actor_col_name="Исполнитель",
-                gemini_key=gemini_key,
                 net_day_hours=net_day_hours,
                 reworks_df=reworks_df,
-                ai_agent_role="Lead QA Automation Architect",
-                ai_goal="Оценить задержки тестирования и возвраты багфиксов"
             )
 
         with t_dev:
@@ -226,10 +217,7 @@ if uploaded_files:
                 rev_df=dev_rev_df,
                 summary_df=summary_df,
                 actor_col_name="Разработчик",
-                gemini_key=gemini_key,
                 net_day_hours=net_day_hours,
-                ai_agent_role="Lead Software Architect",
-                ai_goal="Оптимизировать код-ревью и время разработки"
             )
 
         with t_an:
@@ -244,11 +232,8 @@ if uploaded_files:
                 rev_df=an_rev_df,
                 summary_df=summary_df,
                 actor_col_name="Аналитик",
-                gemini_key=gemini_key,
                 net_day_hours=net_day_hours,
-                ai_agent_role="Lead Business Systems Analyst",
-                ai_goal="Сократить задержки согласования требований"
             )
 
         with t_detail:
-            render_task_detail_tab(summary_df, active_tids, gemini_key=gemini_key)
+            render_task_detail_tab(summary_df, active_tids)

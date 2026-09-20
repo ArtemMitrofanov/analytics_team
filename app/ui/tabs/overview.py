@@ -13,12 +13,10 @@ from config import (
     STATUS_QA_WORK,
 )
 from utils.stats import calc_stats
-from ui.components import render_ai_audit_button
 
 
 def render_overview_tab(
     summary_df: pd.DataFrame,
-    gemini_key: str = "",
     net_day_hours: float = 7.0
 ):
     st.subheader("🌐 Сквозная воронка поставки (Аналитика → Разработка → QA)")
@@ -69,20 +67,3 @@ def render_overview_tab(
     fig_phases.add_trace(go.Bar(name="QA (Тестирование)", x=summary_df["Задача"], y=summary_df.get("В тестировании (дни)", 0), marker_color="#2ca02c"))
     fig_phases.update_layout(barmode="stack", xaxis_title="Задача", yaxis_title="Рабочие дни (д.)", height=380)
     st.plotly_chart(fig_phases, use_container_width=True, key="chart_overview_phases")
-
-    # Кнопка вызова ИИ-аудита воронки
-    render_ai_audit_button(
-        button_label="ИИ-аудит сквозной воронки поставки",
-        key_suffix="overview",
-        agent_role="Lead Delivery Flow Consultant",
-        agent_goal="Выявить скрытые задержки между этапами и предложить шаги по сокращению Lead Time",
-        context_prompt=(
-            f"Метрики сквозного процесса поставки:\n"
-            f"- Всего активных задач: {len(summary_df)}\n"
-            f"- Полный Lead Time: ср = {mean_lead:.2f} д., мед = {med_lead:.2f} д., P85 = {p85_lead:.2f} д.\n"
-            f"- Суммарное время очередей: {mean_wait:.2f} д., Чистая работа: {mean_work:.2f} д.\n"
-            f"- Сквозной Flow Efficiency: {mean_flow:.1f}%\n"
-            f"- Норма рабочего дня: {net_day_hours:.1f} ч."
-        ),
-        gemini_key=gemini_key
-    )

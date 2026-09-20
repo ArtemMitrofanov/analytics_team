@@ -74,6 +74,3 @@ ALL_TRACKED_STATUSES = (
     + STATUS_QA_WAIT
     + STATUS_QA_WORK
 )
-
-# Модели LLM для CrewAI
-DEFAULT_CREWAI_MODEL = "gemini/gemini-3.6-flash"

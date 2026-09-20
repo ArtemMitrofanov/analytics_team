@@ -4,8 +4,6 @@ import pandas as pd
 import streamlit as st
 from utils.stats import calc_stats
 from ui.components import render_searchable_log
-from crewai import Agent, Crew, LLM, Task
-from config import DEFAULT_CREWAI_MODEL
 
 def render_role_tab(
     role_title: str,
@@ -18,11 +16,8 @@ def render_role_tab(
     rev_df: pd.DataFrame,
     summary_df: pd.DataFrame,
     actor_col_name: str,
-    gemini_key: str,
     net_day_hours: float,
-    reworks_df: pd.DataFrame = None,
-    ai_agent_role: str = "",
-    ai_goal: str = ""
+    reworks_df: pd.DataFrame = None
 ):
     st.subheader(f"Аудит направления: {role_title}")
     sub_tabs = st.tabs([
@@ -53,23 +48,6 @@ def render_role_tab(
             st.dataframe(table_filtered, use_container_width=True, hide_index=True)
         else:
             st.info(f"В выбранном периоде нет активности по направлению {role_title}.")
-
-        # Кнопка ИИ-аудита
-        if gemini_key and ai_agent_role and st.button(f"🚀 ИИ-аудит {role_title} (CrewAI)", key=f"btn_ai_{role_title}"):
-            with st.spinner(f"Агент анализирует процесс {role_title}..."):
-                try:
-                    llm = LLM(model=DEFAULT_CREWAI_MODEL, api_key=gemini_key, temperature=0.2)
-                    agent = Agent(role=ai_agent_role, goal=ai_goal, backstory="Senior Delivery Expert", llm=llm)
-                    t = Task(
-                        description=f"Метрики {role_title} (1 р.д.={net_day_hours:.1f}ч): В работе ср={w_m:.2f}д (P85={w_p85:.2f}д), Очередь={q_m:.2f}д, Flow={f_m:.1f}%. Сформулируй 3 рекомендации.",
-                        expected_output="3 рекомендации.",
-                        agent=agent
-                    )
-                    res = Crew(agents=[agent], tasks=[t]).kickoff()
-                    st.success("Аудит завершен!")
-                    st.markdown(res.raw)
-                except Exception as err:
-                    st.error(f"Ошибка ИИ: {err}")
 
     with sub_tabs[1]:
         if not iter_df.empty and actor_col_name in iter_df.columns:

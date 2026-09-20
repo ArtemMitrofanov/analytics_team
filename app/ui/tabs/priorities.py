@@ -4,10 +4,9 @@ import plotly.express as px
 import streamlit as st
 from config import PRIORITY_ORDER
 from utils.stats import calc_stats
-from ui.components import render_ai_audit_button
 
 
-def render_priorities_tab(summary_df: pd.DataFrame, gemini_key: str = ""):
+def render_priorities_tab(summary_df: pd.DataFrame):
     st.subheader("⚡ Влияние приоритета на прохождение очереди и Lead Time")
     st.caption("Проверка дисциплины очередей: насколько быстрее берутся в работу высокоприоритетные задачи")
 
@@ -106,15 +105,3 @@ def render_priorities_tab(summary_df: pd.DataFrame, gemini_key: str = ""):
 
     csv_prio_exp = filtered_prio_df[valid_cols].to_csv(index=False).encode("utf-8-sig")
     st.download_button("📥 Скачать реестр очередей по приоритетам (CSV)", csv_prio_exp, "tasks_by_priority.csv", "text/csv")
-
-    render_ai_audit_button(
-        button_label="ИИ-аудит дисциплины очередей и приоритетов",
-        key_suffix="priorities",
-        agent_role="Kanban Flow Master",
-        agent_goal="Проверить соблюдение классов обслуживания (Class of Service) и устранить зависание критических задач в очередях",
-        context_prompt=(
-            f"Статистика очередей по приоритетам:\n"
-            f"{prio_stat_table[['Приоритет', 'Задач (шт)', 'Lead Time Ср (д.)', 'Всего очередей Ср (д.)', 'Flow Efficiency (%)']].to_string(index=False)}"
-        ),
-        gemini_key=gemini_key
-    )
