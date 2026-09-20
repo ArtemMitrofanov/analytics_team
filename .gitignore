@@ -37,4 +37,4 @@ Thumbs.db
 # Build
 dist/
 build/
-*.egg-info/
+*.egg-info/analytics.duckdb
