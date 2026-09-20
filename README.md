@@ -12,13 +12,13 @@
 ```bash
 pip install -e .
 # или
-pip install pandas==2.2.2 numpy==1.26.4 streamlit==1.37.0 plotly==5.22.0 crewai==0.30.0
+pip install pandas==2.2.2 numpy==1.26.4 streamlit==1.37.0 plotly==5.22.0 duckdb==1.1.0
 ```
 
 ## Запуск
 
 ```bash
-streamlit run app/main.py
+streamlit run main.py
 ```
 
 После запуска откроется браузер по адресу `http://localhost:8501`.
@@ -54,7 +54,7 @@ timestamp,changed_value,added_values,removed_values,author_full_name,issue_id
 2024-01-15 17:00:00,Текущий статус,Протестировано,В тестировании,Сидоров С.С.,TASK-1
 ```
 
-### Поддерживаемые статусы (настраиваются в `app/config.py`)
+### Поддерживаемые статусы (настраиваются в `config.py`)
 
 - **Аналитика**: `К аналитике` → `В аналитике` → `К ревью (аналитика)` / `Ревью аналитики`
 - **Разработка**: `К разработке` → `В разработке` → `К ревью (разработка)` / `Код ревью`
@@ -106,7 +106,7 @@ timestamp,changed_value,added_values,removed_values,author_full_name,issue_id
 
 ## Настройка команд (Core Teams)
 
-Состав команд вынесен в `app/config/team.json`:
+Состав команд вынесен в `config/team.json`:
 
 ```json
 {
@@ -138,10 +138,25 @@ timestamp,changed_value,added_values,removed_values,author_full_name,issue_id
 
 ## Параметры в боковой панели
 
-- **Gemini API Key** — ключ для ИИ-аудита (CrewAI)
-- **Модель Gemini** — выбор модели
 - **Начало/Конец дня** — рабочие часы (по умолчанию 9–18)
 - **Обед + созвоны** — вычитаемые часы (по умолчанию 2.0)
+- **База данных (DuckDB)** — статистика загруженных данных, кнопка очистки
+
+## База данных (DuckDB)
+
+Приложение использует локальную встраиваемую БД **DuckDB** (`analytics.duckdb`) для постоянного хранения загруженных CSV.
+
+### Дедупликация данных
+
+На двух уровнях:
+
+1. **Уровень файла** — MD5-хэш содержимого файла (`file_hash`). Если файл с таким хэшем уже загружен — пропускается полностью.
+2. **Уровень строки** — SHA256-хэш бизнес-ключа (`row_hash`): `task_id|timestamp|changed_value|added_values|removed_values|author`. `INSERT OR IGNORE` по PRIMARY KEY (`row_hash`) гарантирует, что повторные загрузки не создают дубликаты.
+
+### Сайдбар БД
+
+- Метрики: всего строк, уникальных задач, загруженных файлов, последняя загрузка
+- Кнопка **🗑️ Очистить базу** — полная очистка таблицы
 
 ## Вкладки аналитики
 
@@ -161,33 +176,31 @@ timestamp,changed_value,added_values,removed_values,author_full_name,issue_id
 9. **📐 Аудит аналитики** — метрики Analytics, ревью требований
 10. **🔍 Детализация по задаче** — таймлайн статусов конкретной задачи
 
-## ИИ-аудит
-
-Каждая вкладка имеет кнопку **🤖 ИИ-аудит** (требует Gemini API Key). Запускает агента CrewAI с ролью эксперта, выдаёт 3 прикладные рекомендации.
-
 ## Структура проекта
 
 ```
-app/
 ├── main.py                 # Точка входа Streamlit
 ├── config.py               # Константы, статусы, загрузка team.json
 ├── config/
 │   └── team.json           # Состав Core Teams (QA, Dev, Analytics)
+├── db.py                   # DuckDB: загрузка, дедупликация, запросы
+├── pyproject.toml          # Зависимости
+├── README.md
 ├── data/
 │   ├── pipeline.py         # Пакетная обработка + кэш
 │   └── task_processor.py   # Парсинг задач, расчёт фаз, оценок (Оценка + StoryPoints)
 ├── utils/
 │   ├── time_calc.py        # Векторизованный расчёт рабочих минут
 │   └── stats.py            # Mean/Median/P85
-└── ui/
-    ├── components.py       # UI-компоненты, ИИ-аудит
-    └── tabs/               # Рендереры вкладок
+├── ui/
+│   ├── components.py       # UI-компоненты
+│   └── tabs/               # Рендереры вкладок
+└── tests/                  # 62 теста
 ```
 
 ## Тестирование
 
 ```bash
-cd app
 python3 -m pytest tests/ -v
 ```
 
@@ -200,22 +213,22 @@ python3 -m pytest tests/ -v
 | `test_validation.py` | 7 | `validate_csv_schema`: валидный минимальный, с опциональными, отсутствует 1/несколько колонок, пустой DF, case-sensitive, лишние колонки |
 | `test_task_processor.py` | 31 | Парсинг: `clean_val`, `extract_task_type` (Bug/Task/Epic/Техдолг/Run/unknown), `extract_task_priorities` (RU/EN маппинг, очередь), `extract_task_estimates` (все роли, size), `extract_task_deadlines` (ms, on-time, no deadline, invalid, slippage), интеграция `process_single_task`: простой поток An→Dev→QA, детекция реворков (QA→Dev→QA), определение роли QA (core/non-core) |
 | `test_pipeline.py` | 5 | `process_all_tasks_cached`: две задачи, пустой DF, задача без статусов, изменение параметров кэша |
+| `test_db.py` | 4 | DuckDB: первая загрузка, дедуп по row_hash, дедуп по file_hash, перезагрузка с другим file_hash |
 
 ### Структура тестов
 
 ```
-app/
-├── tests/
-│   ├── conftest.py              # добавляет app/ в sys.path
-│   ├── test_time_calc.py
-│   ├── test_stats.py
-│   ├── test_validation.py
-│   ├── test_task_processor.py
-│   └── test_pipeline.py
+tests/
+├── conftest.py              # добавляет корень проекта в sys.path
+├── test_time_calc.py
+├── test_stats.py
+├── test_validation.py
+├── test_task_processor.py
+├── test_pipeline.py
+└── test_db.py               # тесты DuckDB дедупликации
 ```
 
 Запуск с покрытием:
 ```bash
-cd app
-python3 -m pytest tests/ -v --cov=app --cov-report=term-missing
+python3 -m pytest tests/ -v --cov=. --cov-report=term-missing
 ```
