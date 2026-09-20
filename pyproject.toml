@@ -9,6 +9,7 @@ dependencies = [
     "numpy==1.26.4",
     "streamlit==1.37.0",
     "plotly==5.22.0",
+    "duckdb==1.0.0",
 ]
 
 [build-system]

@@ -10,7 +10,6 @@ for path in (str(APP_DIR), str(PROJECT_ROOT)):
         sys.path.insert(0, path)
 
 import pandas as pd
-import streamlit as st
 
 from config import MONTH_NAMES_RU
 from data.pipeline import process_all_tasks_cached
@@ -22,6 +21,9 @@ from ui.tabs.types import render_types_tab
 from ui.tabs.priorities import render_priorities_tab
 from ui.tabs.role_view import render_role_tab
 from ui.tabs.task_detail import render_task_detail_tab
+from db import (
+    get_all_events, get_summary_stats, clear_database
+)
 
 REQUIRED_COLUMNS = {
     "timestamp", "changed_value", "added_values", "removed_values", "author_full_name"
@@ -35,46 +37,93 @@ def validate_csv_schema(df: pd.DataFrame, filename: str) -> tuple[bool, list[str
         return False, [f"{filename}: отсутствуют обязательные колонки: {', '.join(sorted(missing))}"]
     return True, []
 
-st.set_page_config(page_title="Team Process Analytics", page_icon="📊", layout="wide")
-st.title("📊 Комплексный процессный аудит команды")
 
-with st.sidebar:
-    st.header("⚙️ Параметры анализа")
-    work_start_h = st.number_input("Начало дня (час)", 0, 23, 9)
-    work_end_h = st.number_input("Конец дня (час)", 0, 23, 18)
-    deduct_hours = st.number_input("Обед + созвоны (часов)", 0.0, 8.0, 2.0)
-    day_window = max(1.0, float(work_end_h - work_start_h))
-    net_day_hours = max(1.0, day_window - deduct_hours)
-    net_ratio = net_day_hours / day_window
+def run_streamlit_app():
+    """Точка входа для Streamlit. Вызывается только при запуске через `streamlit run main.py`."""
+    import streamlit as st
+    from db import make_file_hash, load_dataframe_to_db, is_file_loaded
 
-uploaded_files = st.file_uploader("Загрузите CSV-файлы журнала задач", type=["csv"], accept_multiple_files=True)
+    st.set_page_config(page_title="Team Process Analytics", page_icon="📊", layout="wide")
+    st.title("📊 Комплексный процессный аудит команды")
 
-if uploaded_files:
-    dfs = []
-    validation_errors = []
-    for f in uploaded_files:
-        f.seek(0)
-        try:
-            df_temp = pd.read_csv(f, on_bad_lines="skip", low_memory=False)
-        except Exception:
+    with st.sidebar:
+        st.header("⚙️ Параметры анализа")
+        work_start_h = st.number_input("Начало дня (час)", 0, 23, 9)
+        work_end_h = st.number_input("Конец дня (час)", 0, 23, 18)
+        deduct_hours = st.number_input("Обед + созвоны (часов)", 0.0, 8.0, 2.0)
+        day_window = max(1.0, float(work_end_h - work_start_h))
+        net_day_hours = max(1.0, day_window - deduct_hours)
+        net_ratio = net_day_hours / day_window
+
+        st.markdown("---")
+        st.header("🗄️ База данных (DuckDB)")
+        stats = get_summary_stats()
+        st.metric("Загружено строк", f"{stats['total_rows']:,}")
+        st.metric("Уникальных задач", f"{stats['unique_tasks']:,}")
+        st.metric("Файлов загружено", f"{stats['loaded_files']:,}")
+        if stats['last_load']:
+            st.caption(f"Последняя загрузка: {stats['last_load']}")
+
+        if st.button("🗑️ Очистить базу", type="secondary"):
+            clear_database()
+            st.success("База очищена")
+            st.rerun()
+
+    uploaded_files = st.file_uploader("Загрузите CSV-файлы журнала задач", type=["csv"], accept_multiple_files=True)
+
+    if uploaded_files:
+        dfs = []
+        validation_errors = []
+        total_new_rows = 0
+        
+        for f in uploaded_files:
             f.seek(0)
-            df_temp = pd.read_csv(f, sep=None, engine="python", on_bad_lines="skip")
+            file_bytes = f.read()
+            file_hash = make_file_hash(file_bytes)
+            
+            # Проверка: файл уже загружен?
+            if is_file_loaded(file_hash):
+                st.info(f"⏭ {f.name} — уже загружен ранее (пропущен)")
+                continue
+            
+            f.seek(0)
+            try:
+                df_temp = pd.read_csv(f, on_bad_lines="skip", low_memory=False)
+            except Exception:
+                f.seek(0)
+                df_temp = pd.read_csv(f, sep=None, engine="python", on_bad_lines="skip")
+            
+            is_valid, errors = validate_csv_schema(df_temp, f.name)
+            if not is_valid:
+                validation_errors.extend(errors)
+                continue
+            
+            df_temp["task_identifier"] = df_temp.get("issue_id", df_temp.get("iissue_id", f.name.replace(".csv", "")))
+            
+            # Загрузка в DuckDB с дедупликацией
+            from db import load_dataframe_to_db
+            new_rows = load_dataframe_to_db(df_temp, f.name, file_hash)
+            total_new_rows += new_rows
+            st.success(f"✅ {f.name}: добавлено {new_rows} новых строк")
         
-        is_valid, errors = validate_csv_schema(df_temp, f.name)
-        if not is_valid:
-            validation_errors.extend(errors)
-            continue
-        
-        df_temp["task_identifier"] = df_temp.get("issue_id", df_temp.get("iissue_id", f.name.replace(".csv", "")))
-        dfs.append(df_temp)
-    
-    if validation_errors:
-        for err in validation_errors:
-            st.error(err)
+        if validation_errors:
+            for err in validation_errors:
+                st.error(err)
+            st.stop()
+
+        if total_new_rows > 0:
+            st.rerun()
+
+    # Читаем все события из DuckDB для аналитики
+    full_raw_df = get_all_events()
+
+    if full_raw_df.empty:
+        st.info("📭 База пуста. Загрузите CSV-файлы для начала анализа.")
         st.stop()
 
-    full_raw_df = pd.concat(dfs, ignore_index=True)
-    full_raw_df["timestamp"] = pd.to_datetime(full_raw_df["timestamp"])
+    # Нормализация колонок для pipeline
+    if "task_identifier" not in full_raw_df.columns:
+        full_raw_df["task_identifier"] = full_raw_df["task_id"]
 
     (
         global_summary_df,
@@ -237,3 +286,12 @@ if uploaded_files:
 
         with t_detail:
             render_task_detail_tab(summary_df, active_tids)
+
+
+if __name__ == "__main__":
+    # Запуск только при прямом вызове python main.py (не при импорте в тестах)
+    import streamlit as st
+    from streamlit.runtime.scriptrunner import get_script_run_ctx
+    
+    if get_script_run_ctx() is not None:
+        run_streamlit_app()
