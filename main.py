@@ -133,6 +133,7 @@ def run_streamlit_app():
         all_dev_revs,
         all_an_revs,
         all_reworks,
+        all_qa_waits,
     ) = process_all_tasks_cached(
         get_db_fingerprint(), work_start_h, work_end_h, net_ratio, net_day_hours
     )
@@ -204,6 +205,7 @@ def run_streamlit_app():
     dev_rev_df = all_dev_revs[all_dev_revs["Задача"].isin(active_tids)].copy() if not all_dev_revs.empty else all_dev_revs
     an_rev_df = all_an_revs[all_an_revs["Задача"].isin(active_tids)].copy() if not all_an_revs.empty else all_an_revs
     reworks_df = all_reworks[all_reworks["Задача"].isin(active_tids)].copy() if not all_reworks.empty else all_reworks
+    qa_wait_df = all_qa_waits[all_qa_waits["Задача"].isin(active_tids)].copy() if not all_qa_waits.empty else all_qa_waits
 
     if summary_df.empty:
         st.warning(f"⚠️ В выбранном периоде ({sel_label}) нет движения по статусам.")
@@ -250,10 +252,17 @@ def run_streamlit_app():
                 table_cols=["Задача", "В тестировании (дни)", "Очередь ожидания QA (дни)", "Циклтайм QA (дни)", "Flow Efficiency QA (%)"],
                 iter_df=qa_iter_df,
                 rev_df=pd.DataFrame(),
+                wait_df=qa_wait_df,
                 summary_df=summary_df,
                 actor_col_name="Исполнитель",
                 net_day_hours=net_day_hours,
                 reworks_df=reworks_df,
+                role_key="qa",
+                start_date=None if period_mode == "Весь период" else start_date,
+                end_date=None if period_mode == "Весь период" else end_date,
+                work_start_h=work_start_h,
+                work_end_h=work_end_h,
+                net_ratio=net_ratio,
             )
 
         with t_dev:
@@ -263,12 +272,20 @@ def run_streamlit_app():
                 queue_status_col="Очередь/Код Ревью Dev (д.)",
                 cycle_col="Цикл Разработки (д.)",
                 flow_col="Flow Разработки (%)",
-                table_cols=["Задача", "К разработке (д.)", "В разработке (д.)", "Цикл Разработки (д.)", "Flow Разработки (%)"],
+                table_cols=["Задача", "К разработке (д.)", "В разработке (д.)", "К ревью (разработка) (д.)", "Ревью кода (д.)", "Цикл Разработки (д.)", "Flow Разработки (%)"],
                 iter_df=dev_iter_df,
                 rev_df=dev_rev_df,
                 summary_df=summary_df,
                 actor_col_name="Разработчик",
                 net_day_hours=net_day_hours,
+                role_key="dev",
+                start_date=None if period_mode == "Весь период" else start_date,
+                end_date=None if period_mode == "Весь период" else end_date,
+                work_start_h=work_start_h,
+                work_end_h=work_end_h,
+                net_ratio=net_ratio,
+                wait_col="К разработке (д.)",
+                rev_col="Ревью кода (д.)",
             )
 
         with t_an:
@@ -278,12 +295,20 @@ def run_streamlit_app():
                 queue_status_col="Очередь/Ревью Аналитики (д.)",
                 cycle_col="Цикл Аналитики (д.)",
                 flow_col="Flow Аналитики (%)",
-                table_cols=["Задача", "К аналитике (д.)", "В аналитике (д.)", "Цикл Аналитики (д.)", "Flow Аналитики (%)"],
+                table_cols=["Задача", "К аналитике (д.)", "В аналитике (д.)", "К ревью (аналитика) (д.)", "Ревью аналитики (д.)", "Цикл Аналитики (д.)", "Flow Аналитики (%)"],
                 iter_df=an_iter_df,
                 rev_df=an_rev_df,
                 summary_df=summary_df,
                 actor_col_name="Аналитик",
                 net_day_hours=net_day_hours,
+                role_key="an",
+                start_date=None if period_mode == "Весь период" else start_date,
+                end_date=None if period_mode == "Весь период" else end_date,
+                work_start_h=work_start_h,
+                work_end_h=work_end_h,
+                net_ratio=net_ratio,
+                wait_col="К аналитике (д.)",
+                rev_col="Ревью аналитики (д.)",
             )
 
         with t_detail:

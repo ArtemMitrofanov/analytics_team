@@ -167,7 +167,7 @@ def process_single_task(
     work_end_h: int = 18,
     net_ratio: float = 0.78,
     net_day_hours: float = 7.0
-) -> Tuple[Dict[str, Any], List[dict], List[dict], List[dict], List[dict], List[dict], List[dict]]:
+) -> Tuple[Dict[str, Any], List[dict], List[dict], List[dict], List[dict], List[dict], List[dict], List[dict]]:
     """Обрабатывает всю историю задачи и вычисляет длительности по статусам и итерациям."""
     status_df = task_df[task_df["changed_value"].isin(["Текущий статус", "State"])].copy()
     status_df["timestamp"] = pd.to_datetime(status_df["timestamp"])
@@ -180,6 +180,7 @@ def process_single_task(
     qa_waiting_intervals = []
 
     qa_iters, dev_iters, an_iters = [], [], []
+    qa_wait_iters = []
     dev_revs, an_revs, reworks = [], [], []
 
     qa_first_wait = None
@@ -251,6 +252,10 @@ def process_single_task(
             if qa_first_wait is None:
                 qa_first_wait = t1
             qa_waiting_intervals.append((t1, t2))
+            qa_wait_iters.append({
+                "Задача": task_id, "Начало": t1.strftime("%Y-%m-%d %H:%M:%S"),
+                "Завершение": t2.strftime("%Y-%m-%d %H:%M:%S"), "Раб. дней": dur_days,
+            })
 
         elif curr_status == "В тестировании":
             qa_in_test_intervals.append((t1, t2))
@@ -352,4 +357,5 @@ def process_single_task(
         dev_revs,
         an_revs,
         reworks,
+        qa_wait_iters,
     )

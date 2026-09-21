@@ -18,6 +18,7 @@ def _process_all_tasks(
 
     tasks_summaries = []
     qa_iterations, dev_iterations, an_iterations = [], [], []
+    qa_wait_intervals = []
     dev_reviews, an_reviews, qa_reworks = [], [], []
 
     # O(N) вместо O(N^2)
@@ -31,6 +32,7 @@ def _process_all_tasks(
             dev_revs,
             an_revs,
             reworks,
+            qa_wait_iters,
         ) = process_single_task(
             str(tid), sub_df, work_start_h, work_end_h, net_ratio, net_day_hours
         )
@@ -41,6 +43,7 @@ def _process_all_tasks(
         dev_reviews.extend(dev_revs)
         an_reviews.extend(an_revs)
         qa_reworks.extend(reworks)
+        qa_wait_intervals.extend(qa_wait_iters)
 
     return (
         pd.DataFrame(tasks_summaries),
@@ -50,6 +53,7 @@ def _process_all_tasks(
         pd.DataFrame(dev_reviews),
         pd.DataFrame(an_reviews),
         pd.DataFrame(qa_reworks),
+        pd.DataFrame(qa_wait_intervals),
     )
 
 
@@ -69,6 +73,7 @@ def process_all_tasks_cached(
         return (
             pd.DataFrame(), pd.DataFrame(), pd.DataFrame(),
             pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(),
+            pd.DataFrame(),
         )
     return _process_all_tasks(raw_df, work_start_h, work_end_h, net_ratio, net_day_hours)
 

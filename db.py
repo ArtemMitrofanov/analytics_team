@@ -6,7 +6,7 @@ from typing import Optional
 import duckdb
 import pandas as pd
 
-DB_PATH = Path("analytics.duckdb")
+DB_PATH = Path(__file__).resolve().parent / "analytics.duckdb"
 
 
 def get_conn() -> duckdb.DuckDBPyConnection:

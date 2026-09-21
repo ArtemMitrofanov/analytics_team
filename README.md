@@ -171,9 +171,9 @@ timestamp,changed_value,added_values,removed_values,author_full_name,issue_id
 4. **⏰ Контроль дедлайнов (SLA)** — сдвиги дедлайнов, просрочки
 5. **🐞 Дефекты vs Фичи** — распределение по типам, метрики по типам
 6. **⚡ Приоритеты и Очереди** — время в очередях по приоритетам
-7. **🧪 Аудит тестирования QA** — метрики QA, исполнители, реворки
-8. **💻 Аудит разработки** — метрики Dev, код-ревью, исполнители
-9. **📐 Аудит аналитики** — метрики Analytics, ревью требований
+7. **🧪 Аудит тестирования QA** — метрики QA, исполнители, реворки; при выборе периода итерации и метрики фильтруются по датам
+8. **💻 Аудит разработки** — метрики Dev, код-ревью, исполнители; при выборе периода итерации и метрики фильтруются по датам
+9. **📐 Аудит аналитики** — метрики Analytics, ревью требований; при выборе периода итерации и метрики фильтруются по датам
 10. **🔍 Детализация по задаче** — таймлайн статусов конкретной задачи
 
 ## Структура проекта
@@ -189,14 +189,18 @@ timestamp,changed_value,added_values,removed_values,author_full_name,issue_id
 ├── data/
 │   ├── pipeline.py         # Пакетная обработка; кэш стучится по отпечатку БД (get_db_fingerprint),
 │   │                       # process_all_tasks — некэшированная обёртка для тестов
-│   └── task_processor.py   # Парсинг задач, расчёт фаз, оценок (Оценка + StoryPoints)
+│   ├── task_processor.py   # Парсинг задач, расчёт фаз, оценок (Оценка + StoryPoints),
+│   │                       # журнал интервалов ожидания QA («К тестированию»)
+│   └── metrics.py          # Пересчёт метрик этапа (work/wait/rev/cycle/flow) по итерациям
+│                           # и интервалам ожидания периода; очередь QA — из wait_df;
+│                           # для Dev/Analytics — отдельные колонки wait и rev
 ├── utils/
 │   ├── time_calc.py        # Векторизованный расчёт рабочих минут
 │   └── stats.py            # Mean/Median/P85
 ├── ui/
 │   ├── components.py       # UI-компоненты
 │   └── tabs/               # Рендереры вкладок
-└── tests/                  # 78 тестов
+└── tests/                  # 92 теста
 ```
 
 ## Тестирование
@@ -205,7 +209,7 @@ timestamp,changed_value,added_values,removed_values,author_full_name,issue_id
 python3 -m pytest tests/ -v
 ```
 
-### Набор тестов (78 тестов)
+### Набор тестов (92 теста)
 
 | Файл | Тестов | Описание |
 |------|--------|----------|
@@ -214,6 +218,7 @@ python3 -m pytest tests/ -v
 | `test_validation.py` | 7 | `validate_csv_schema`: валидный минимальный, с опциональными, отсутствует 1/несколько колонок, пустой DF, case-sensitive, лишние колонки |
 | `test_task_processor.py` | 30 | Парсинг: `clean_val`, `extract_task_type` (Bug/Task/Epic/Техдолг/Run/unknown), `extract_task_priorities` (RU/EN маппинг, очередь), `extract_task_estimates` (все роли, size), `extract_task_deadlines` (ms, on-time, no deadline, invalid, slippage), интеграция `process_single_task`: простой поток An→Dev→QA, детекция реворков (QA→Dev→QA), определение роли QA (core/non-core) |
 | `test_pipeline.py` | 4 | `process_all_tasks`: две задачи, пустой DF, задача без статусов, изменение параметров рабочего дня |
+| `test_metrics.py` | 14 | `recompute_role_period_metrics`: фильтрация итераций по периоду (внутри/вне/пересекает/пусто), пересчёт QA (нет итераций в периоде, одна итерация, смешанные периоды, очередь из wait_df, wait вне периода, без wait_df → 0), Dev (отдельные wait/rev), Analytics (отдельные wait/rev), неизвестная роль, пустой summary |
 | `test_db.py` | 16 | DuckDB: row_hash (одинаковые/разные поля), file_hash, первая загрузка, дедуп по row_hash/file_hash, `is_file_loaded`, `get_all_events`, `get_summary_stats`, очистка БД |
 
 ### Структура тестов
@@ -226,6 +231,7 @@ tests/
 ├── test_validation.py
 ├── test_task_processor.py
 ├── test_pipeline.py
+├── test_metrics.py          # пересчёт метрик этапа за период
 └── test_db.py               # тесты DuckDB дедупликации
 ```
 

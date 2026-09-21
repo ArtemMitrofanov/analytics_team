@@ -59,6 +59,7 @@ class TestProcessAllTasksCached:
             dev_revs,
             an_revs,
             reworks,
+            qa_waits,
         ) = process_all_tasks_cached(full_df, 9, 18, 0.78, 7.0)
 
         assert len(summary_df) == 2
@@ -85,7 +86,7 @@ class TestProcessAllTasksCached:
 
         result = process_all_tasks_cached(df, 9, 18, 0.78, 7.0)
 
-        summary_df, qa_iters, dev_iters, an_iters, dev_revs, an_revs, reworks = result
+        summary_df, qa_iters, dev_iters, an_iters, dev_revs, an_revs, reworks, qa_waits = result
 
         assert len(summary_df) == 0
         assert len(qa_iters) == 0
@@ -94,6 +95,7 @@ class TestProcessAllTasksCached:
         assert len(dev_revs) == 0
         assert len(an_revs) == 0
         assert len(reworks) == 0
+        assert len(qa_waits) == 0
 
     def test_single_task_no_status_changes(self):
         """Задача без смены статусов (только метаданные)."""

@@ -295,7 +295,7 @@ class TestProcessSingleTask:
 
         result = process_single_task("TASK-1", task_df, 9, 18, 0.78, 7.0)
 
-        task_row, qa_iters, dev_iters, an_iters, dev_revs, an_revs, reworks = result
+        task_row, qa_iters, dev_iters, an_iters, dev_revs, an_revs, reworks, qa_waits = result
 
         assert task_row["Задача"] == "TASK-1"
         assert task_row["В аналитике (д.)"] > 0
@@ -306,6 +306,7 @@ class TestProcessSingleTask:
         assert len(dev_iters) == 1
         assert len(qa_iters) == 1
         assert len(reworks) == 0
+        assert len(qa_waits) >= 1  # есть хотя бы один интервал "К тестированию"
 
     def test_rework_detection(self):
         """Детекция возврата на доработку (QA -> Dev -> QA)."""
@@ -327,7 +328,7 @@ class TestProcessSingleTask:
 
         result = process_single_task("TASK-2", task_df, 9, 18, 0.78, 7.0)
 
-        task_row, qa_iters, dev_iters, an_iters, dev_revs, an_revs, reworks = result
+        task_row, qa_iters, dev_iters, an_iters, dev_revs, an_revs, reworks, qa_waits = result
 
         assert len(reworks) == 1
         assert reworks[0]["Задача"] == "TASK-2"
