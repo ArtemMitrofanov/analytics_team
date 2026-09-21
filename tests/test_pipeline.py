@@ -1,11 +1,7 @@
 """Тесты для data/pipeline.py — пакетная обработка."""
 import pandas as pd
 import pytest
-<<<<<<< HEAD
 from data.pipeline import process_all_tasks as process_all_tasks_cached
-=======
-from data.pipeline import process_all_tasks_cached
->>>>>>> c7b0efa56c7e205b1b045fcc5a20a4380bdd34e3
 
 
 class TestProcessAllTasksCached:

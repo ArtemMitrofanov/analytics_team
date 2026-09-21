@@ -161,11 +161,7 @@ timestamp,changed_value,added_values,removed_values,author_full_name,issue_id
 ## Вкладки аналитики
 
 1. **🌐 Общая информация** — сквозная воронка, Lead Time, Flow Efficiency
-<<<<<<< HEAD
 2. **📅 Динамика по периодам** — группировка по месяцам или кварталам; задачи атрибутируются в период, в котором они были завершены (статусы `Протестировано` / `К релизу` / `Завершено`), незавершённые — отдельной строкой «В работе»
-=======
-2. **📅 Сравнение периодов** — спринты/кварталы, динамика метрик
->>>>>>> c7b0efa56c7e205b1b045fcc5a20a4380bdd34e3
 3. **🎯 Оценка задач** — план/факт по аналитике/разработке/QA, T-shirt size
    - **Калибровка T-Shirt размеров** — эталонные ориентиры по фактическим дням (P50, P85)
    - **Эффективность по факт-оценкам** — таблицы для QA / Dev / Analytics:
@@ -191,12 +187,8 @@ timestamp,changed_value,added_values,removed_values,author_full_name,issue_id
 ├── pyproject.toml          # Зависимости
 ├── README.md
 ├── data/
-<<<<<<< HEAD
 │   ├── pipeline.py         # Пакетная обработка; кэш стучится по отпечатку БД (get_db_fingerprint),
 │   │                       # process_all_tasks — некэшированная обёртка для тестов
-=======
-│   ├── pipeline.py         # Пакетная обработка + кэш
->>>>>>> c7b0efa56c7e205b1b045fcc5a20a4380bdd34e3
 │   └── task_processor.py   # Парсинг задач, расчёт фаз, оценок (Оценка + StoryPoints)
 ├── utils/
 │   ├── time_calc.py        # Векторизованный расчёт рабочих минут
@@ -204,7 +196,7 @@ timestamp,changed_value,added_values,removed_values,author_full_name,issue_id
 ├── ui/
 │   ├── components.py       # UI-компоненты
 │   └── tabs/               # Рендереры вкладок
-└── tests/                  # 62 теста
+└── tests/                  # 78 тестов
 ```
 
 ## Тестирование
@@ -213,16 +205,16 @@ timestamp,changed_value,added_values,removed_values,author_full_name,issue_id
 python3 -m pytest tests/ -v
 ```
 
-### Набор тестов (62 теста)
+### Набор тестов (78 тестов)
 
 | Файл | Тестов | Описание |
 |------|--------|----------|
-| `test_time_calc.py` | 11 | `get_work_minutes`: один день, границы рабочего времени, выходные, Mon-Fri, Mon-Mon, Fri-Mon, Sat-Mon, месяц, невалидные входы, кастомные часы |
-| `test_stats.py` | 8 | `calc_stats`: пустая серия, None, нули, положительные, смешанные, отрицательные, одно значение, типы возврата |
+| `test_time_calc.py` | 12 | `get_work_minutes`: один день, границы рабочего времени, выходные, Mon-Fri, Mon-Mon, Fri-Mon, Sat-Mon, месяц, невалидные входы, кастомные часы, нулевой рабочий день |
+| `test_stats.py` | 9 | `calc_stats`: пустая серия, None, нули, положительные, смешанные, отрицательные, одно значение, два значения, типы возврата |
 | `test_validation.py` | 7 | `validate_csv_schema`: валидный минимальный, с опциональными, отсутствует 1/несколько колонок, пустой DF, case-sensitive, лишние колонки |
-| `test_task_processor.py` | 31 | Парсинг: `clean_val`, `extract_task_type` (Bug/Task/Epic/Техдолг/Run/unknown), `extract_task_priorities` (RU/EN маппинг, очередь), `extract_task_estimates` (все роли, size), `extract_task_deadlines` (ms, on-time, no deadline, invalid, slippage), интеграция `process_single_task`: простой поток An→Dev→QA, детекция реворков (QA→Dev→QA), определение роли QA (core/non-core) |
-| `test_pipeline.py` | 5 | `process_all_tasks_cached`: две задачи, пустой DF, задача без статусов, изменение параметров кэша |
-| `test_db.py` | 4 | DuckDB: первая загрузка, дедуп по row_hash, дедуп по file_hash, перезагрузка с другим file_hash |
+| `test_task_processor.py` | 30 | Парсинг: `clean_val`, `extract_task_type` (Bug/Task/Epic/Техдолг/Run/unknown), `extract_task_priorities` (RU/EN маппинг, очередь), `extract_task_estimates` (все роли, size), `extract_task_deadlines` (ms, on-time, no deadline, invalid, slippage), интеграция `process_single_task`: простой поток An→Dev→QA, детекция реворков (QA→Dev→QA), определение роли QA (core/non-core) |
+| `test_pipeline.py` | 4 | `process_all_tasks`: две задачи, пустой DF, задача без статусов, изменение параметров рабочего дня |
+| `test_db.py` | 16 | DuckDB: row_hash (одинаковые/разные поля), file_hash, первая загрузка, дедуп по row_hash/file_hash, `is_file_loaded`, `get_all_events`, `get_summary_stats`, очистка БД |
 
 ### Структура тестов
 

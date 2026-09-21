@@ -186,19 +186,12 @@ def process_single_task(
     qa_final_tested = None
     task_finished_at = None
 
-<<<<<<< HEAD
     # Поиск даты завершения и первого выхода из QA ("Протестировано")
     for _, r in status_df.iterrows():
         if r["to_status"] in STATUS_COMPLETION and task_finished_at is None:
             task_finished_at = r["timestamp"]
         if r["to_status"] == "Протестировано" and qa_final_tested is None:
             qa_final_tested = r["timestamp"]
-=======
-    # Поиск даты завершения
-    for _, r in status_df.iterrows():
-        if r["to_status"] in STATUS_COMPLETION and task_finished_at is None:
-            task_finished_at = r["timestamp"]
->>>>>>> c7b0efa56c7e205b1b045fcc5a20a4380bdd34e3
 
     resolved_sub = task_df[task_df['activity_type'] == 'IssueResolvedActivityItem']
     if not resolved_sub.empty:
@@ -268,11 +261,6 @@ def process_single_task(
                 "Раб. дней": dur_days,
             })
             qa_num += 1
-<<<<<<< HEAD
-=======
-            if r_curr.get("to_status") == "Протестировано":
-                qa_final_tested = t2
->>>>>>> c7b0efa56c7e205b1b045fcc5a20a4380bdd34e3
 
     # Детекция возвратов на доработку (reworks)
     for i in range(len(status_df) - 1):

@@ -134,7 +134,6 @@ def load_dataframe_to_db(df: pd.DataFrame, source_file: str, file_hash: str) -> 
     return 0
 
 
-<<<<<<< HEAD
 def get_db_fingerprint() -> str:
     """Короткий отпечаток содержимого БД для ключа кэша pipeline."""
     conn = get_conn()
@@ -147,8 +146,6 @@ def get_db_fingerprint() -> str:
     return str(row[0]) if row else "empty"
 
 
-=======
->>>>>>> c7b0efa56c7e205b1b045fcc5a20a4380bdd34e3
 def get_all_events() -> pd.DataFrame:
     """Получить все события для аналитики."""
     conn = get_conn()

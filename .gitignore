@@ -37,12 +37,9 @@ Thumbs.db
 # Build
 dist/
 build/
-*.egg-info/analytics.duckdb
-<<<<<<< HEAD
+*.egg-info/
 
 # база данных
 analytics.duckdb
 *.duckdb
 *.duckdb.wal
-=======
->>>>>>> c7b0efa56c7e205b1b045fcc5a20a4380bdd34e3
