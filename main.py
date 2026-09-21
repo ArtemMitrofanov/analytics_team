@@ -22,7 +22,11 @@ from ui.tabs.priorities import render_priorities_tab
 from ui.tabs.role_view import render_role_tab
 from ui.tabs.task_detail import render_task_detail_tab
 from db import (
+<<<<<<< HEAD
     get_all_events, get_summary_stats, clear_database, get_db_fingerprint
+=======
+    get_all_events, get_summary_stats, clear_database
+>>>>>>> c7b0efa56c7e205b1b045fcc5a20a4380bdd34e3
 )
 
 REQUIRED_COLUMNS = {
@@ -133,9 +137,13 @@ def run_streamlit_app():
         all_dev_revs,
         all_an_revs,
         all_reworks,
+<<<<<<< HEAD
     ) = process_all_tasks_cached(
         get_db_fingerprint(), work_start_h, work_end_h, net_ratio, net_day_hours
     )
+=======
+    ) = process_all_tasks_cached(full_raw_df, work_start_h, work_end_h, net_ratio, net_day_hours)
+>>>>>>> c7b0efa56c7e205b1b045fcc5a20a4380bdd34e3
 
     periods_m = sorted(full_raw_df["timestamp"].dt.to_period("M").unique())
     monthly_sprints_list = [
@@ -211,7 +219,11 @@ def run_streamlit_app():
         # ЕДИНСТВЕННЫЙ блок объявления всех 10 вкладок
         t_overview, t_periods, t_est, t_deadlines, t_types, t_prio, t_qa, t_dev, t_an, t_detail = st.tabs([
             "🌐 Общая информация",
+<<<<<<< HEAD
             "📅 Динамика по периодам",
+=======
+            "📅 Сравнение периодов (Спринты / Кварталы)",
+>>>>>>> c7b0efa56c7e205b1b045fcc5a20a4380bdd34e3
             "🎯 Оценка задач",
             "⏰ Контроль дедлайнов (SLA)",
             "🐞 Дефекты vs Фичи",

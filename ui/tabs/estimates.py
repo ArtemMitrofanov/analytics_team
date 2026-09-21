@@ -35,10 +35,15 @@ def render_estimates_tab(
     tot_a, acc_a, under_a, _ = eval_accuracy("an_plan", "an_fact", est_df)
 
     e1, e2, e3, e4 = st.columns(4)
+<<<<<<< HEAD
     acc_parts = [v for v, t in ((acc_d, tot_d), (acc_q, tot_q), (acc_a, tot_a)) if t > 0]
     under_parts = [v for v, t in ((under_d, tot_d), (under_q, tot_q), (under_a, tot_a)) if t > 0]
     avg_acc = sum(acc_parts) / len(acc_parts) if acc_parts else 0.0
     avg_under = sum(under_parts) / len(under_parts) if under_parts else 0.0
+=======
+    avg_acc = (acc_d + acc_q + acc_a) / 3 if (tot_d or tot_q or tot_a) else 0.0
+    avg_under = (under_d + under_q + under_a) / 3 if (tot_d or tot_q or tot_a) else 0.0
+>>>>>>> c7b0efa56c7e205b1b045fcc5a20a4380bdd34e3
 
     e1.metric("Точность эстимации (План=Факт)", f"{avg_acc:.1f}%")
     e2.metric("Недооценка сложности (Факт > План)", f"{avg_under:.1f}%", delta_color="inverse")
@@ -158,6 +163,7 @@ def render_estimates_tab(
     }
     tbl_est = tbl_est.rename(columns={k: v for k, v in rename_dict.items() if k in tbl_est.columns})
 
+<<<<<<< HEAD
     if filter_mismatch:
         mismatch_mask = pd.Series(False, index=tbl_est.index)
         for plan_name, fact_name in (
@@ -168,6 +174,14 @@ def render_estimates_tab(
             if plan_name in tbl_est.columns and fact_name in tbl_est.columns:
                 mismatch_mask |= tbl_est[plan_name].astype(str) != tbl_est[fact_name].astype(str)
         tbl_est = tbl_est[mismatch_mask]
+=======
+    if filter_mismatch and "План Dev" in tbl_est.columns and "Факт Dev" in tbl_est.columns:
+        tbl_est = tbl_est[
+            (tbl_est.get("План Dev") != tbl_est.get("Факт Dev"))
+            | (tbl_est.get("План QA") != tbl_est.get("Факт QA"))
+            | (tbl_est.get("План Аналитика") != tbl_est.get("Факт Аналитика"))
+        ]
+>>>>>>> c7b0efa56c7e205b1b045fcc5a20a4380bdd34e3
 
     search_est_q = st.text_input("🔍 Быстрый поиск задачи по номеру:", placeholder="Например: 2421", key="search_est_table")
     if search_est_q.strip():

@@ -3,8 +3,13 @@ import pandas as pd
 import streamlit as st
 from data.task_processor import process_single_task
 
+<<<<<<< HEAD
 
 def _process_all_tasks(
+=======
+@st.cache_data(show_spinner="Выполняется быстрый анализ журнала задач...")
+def process_all_tasks_cached(
+>>>>>>> c7b0efa56c7e205b1b045fcc5a20a4380bdd34e3
     raw_df: pd.DataFrame,
     work_start_h: int,
     work_end_h: int,
@@ -12,10 +17,13 @@ def _process_all_tasks(
     net_day_hours: float
 ):
     """Группирует датафрейм один раз и обрабатывает задачи за один проход без повторного сканирования."""
+<<<<<<< HEAD
     if "task_identifier" not in raw_df.columns:
         raw_df = raw_df.copy()
         raw_df["task_identifier"] = raw_df["task_id"]
 
+=======
+>>>>>>> c7b0efa56c7e205b1b045fcc5a20a4380bdd34e3
     tasks_summaries = []
     qa_iterations, dev_iterations, an_iterations = [], [], []
     dev_reviews, an_reviews, qa_reworks = [], [], []
@@ -50,6 +58,7 @@ def _process_all_tasks(
         pd.DataFrame(dev_reviews),
         pd.DataFrame(an_reviews),
         pd.DataFrame(qa_reworks),
+<<<<<<< HEAD
     )
 
 
@@ -82,3 +91,6 @@ def process_all_tasks(
 ):
     """Некэшированная обработка переданного DataFrame (используется в тестах)."""
     return _process_all_tasks(raw_df, work_start_h, work_end_h, net_ratio, net_day_hours)
+=======
+    )
+>>>>>>> c7b0efa56c7e205b1b045fcc5a20a4380bdd34e3
