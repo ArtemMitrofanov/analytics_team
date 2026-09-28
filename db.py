@@ -1,12 +1,13 @@
 """db.py — DuckDB хранение событий задач с дедупликацией по row_hash."""
 import hashlib
+import os
 from pathlib import Path
 from typing import Optional
 
 import duckdb
 import pandas as pd
 
-DB_PATH = Path(__file__).resolve().parent / "analytics.duckdb"
+DB_PATH = Path(os.getenv("DUCKDB_PATH", Path(__file__).resolve().parent / "data" / "analytics.duckdb"))
 
 
 def get_conn() -> duckdb.DuckDBPyConnection:

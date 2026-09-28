@@ -7,7 +7,7 @@
 - Python 3.10+
 - Зависимости см. в `pyproject.toml`
 
-## Установка
+## Установка (локально)
 
 ```bash
 pip install -e .
@@ -15,13 +15,139 @@ pip install -e .
 pip install pandas==2.2.2 numpy==1.26.4 streamlit==1.37.0 plotly==5.22.0 duckdb==1.1.0
 ```
 
-## Запуск
+## Запуск (локально)
 
 ```bash
 streamlit run main.py
 ```
 
 После запуска откроется браузер по адресу `http://localhost:8501`.
+
+---
+
+## 🐳 Запуск в Docker (рекомендуется для продакшена)
+
+Docker обеспечивает **персистентность базы данных** между перезапусками контейнера через volume.
+
+### Быстрый старт
+
+```bash
+# Сборка и запуск в фоне
+docker compose up --build -d
+
+# Логи
+docker compose logs -f app
+
+# Остановка (данные БД сохраняются в ./data/)
+docker compose down
+
+# Полная очистка с удалением данных БД
+docker compose down -v
+```
+
+Приложение доступно на `http://localhost:8501`.
+
+### Как это работает
+
+| Файл | Назначение |
+|------|------------|
+| `Dockerfile` | Образ приложения на базе `python:3.12-slim` |
+| `docker-compose.yml` | Сервис `app` с пробросом порта 8501 и монтированием `./data:/app/data` |
+| `.dockerignore` | Исключает локальные `__pycache__`, `.pytest_cache`, `*.duckdb`, `data/`, `.git` |
+| `db.py` | Читает путь к БД из переменной окружения `DUCKDB_PATH` (по умолчанию `/app/data/analytics.duckdb`) |
+
+### Структура данных на хосте
+
+```
+./data/
+├── analytics.duckdb          # Файл БД DuckDB (создаётся при первом запуске)
+```
+
+**Важно:** папка `./data/` монтируется как volume — при `docker compose down` данные **не удаляются**. Только `docker compose down -v` удаляет volume.
+
+### Переменные окружения (docker-compose.yml)
+
+```yaml
+environment:
+  - PYTHONUNBUFFERED=1
+  - DUCKDB_PATH=/app/data/analytics.duckdb
+```
+
+### Бэкап базы данных
+
+```bash
+# Остановить контейнер для консистентного бэкапа
+docker compose down
+
+# Скопировать файл БД
+cp ./data/analytics.duckdb ./backups/analytics_$(date +%F).duckdb
+
+# Запустить снова
+docker compose up -d
+```
+
+### Обновление приложения
+
+```bash
+# Получить изменения
+git pull
+
+# Пересобрать и перезапустить (данные сохранятся)
+docker compose up --build -d
+```
+
+### Named Volume (альтернатива для продакшена)
+
+В `docker-compose.yml` можно использовать named volume вместо bind mount:
+
+```yaml
+volumes:
+  duckdb_data:
+
+services:
+  app:
+    volumes:
+      - duckdb_data:/app/data
+```
+
+Плюсы: переносимость, управление через `docker volume`, работает в Swarm/K8s.
+
+---
+
+## ⚠️ Важно: Совместимость версий DuckDB
+
+**DuckDB не гарантирует обратную совместимость формата файла БД между мажорными версиями.**
+
+Если файл `analytics.duckdb` создан версией `1.5.x`, а в контейнере стоит `1.0.x` (или наоборот) — будет ошибка:
+```
+SerializationException: Failed to deserialize: expected end of object...
+```
+
+### Решение:
+Убедитесь, что версия в `pyproject.toml` совпадает с локальной:
+```toml
+dependencies = [
+    ...
+    "duckdb==1.5.5",  # должна совпадать с версией, создававшей файл БД
+]
+```
+
+Проверить версию:
+```bash
+# Локально
+python3 -c "import duckdb; print(duckdb.__version__)"
+
+# В контейнере
+docker compose exec app python3 -c "import duckdb; print(duckdb.__version__)"
+```
+
+Если версии расходятся:
+1. Обновите `pyproject.toml`
+2. Пересоберите образ: `docker compose up --build -d`
+
+> **Совет:** Фиксируйте версию DuckDB в `pyproject.toml` (не используйте `duckdb>=x.y`), чтобы избежать неожиданных обновлений при пересборке.
+
+---
 
 ## Формат входного CSV
 

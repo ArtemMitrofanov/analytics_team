@@ -1,0 +1,19 @@
+version: "3.8"
+
+services:
+  app:
+    build: .
+    ports:
+      - "8501:8501"
+    volumes:
+      # Монтируем папку data хоста в контейнер для персистентности БД
+      - ./data:/app/data
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DUCKDB_PATH=/app/data/analytics.duckdb
+    restart: unless-stopped
+
+# Named volume (альтернатива ./data:/app/data) — раскомментируйте если нужно:
+# volumes:
+#   duckdb_data:
+#     driver: local
