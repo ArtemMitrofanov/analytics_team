@@ -149,7 +149,18 @@ def render_role_tab(
                 display_df = finished_with_work.copy()
                 display_df["Исполнитель"] = display_df["Задача"].map(executor_map).fillna("")
                 
+                # Добавляем колонку с фактическим размером задачи для роли
+                fact_col_map = {"qa": "qa_fact", "dev": "dev_fact", "an": "an_fact"}
+                fact_col = fact_col_map.get(role_key)
+                if fact_col and fact_col in display_df.columns:
+                    display_df["Размер (факт)"] = display_df[fact_col]
+                    size_col = "Размер (факт)"
+                else:
+                    size_col = None
+                
                 display_cols = ["Задача", "Исполнитель", "finished_at", work_status_col]
+                if size_col:
+                    display_cols.insert(3, size_col)
                 if queue_status_col in display_df.columns:
                     display_cols.append(queue_status_col)
                 if cycle_col in display_df.columns:
