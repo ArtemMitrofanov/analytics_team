@@ -56,6 +56,7 @@ def render_role_tab(
     wait_df: pd.DataFrame = None,
     wait_col: Optional[str] = None,
     rev_col: Optional[str] = None,
+    global_summary_df: pd.DataFrame = None,
 ):
     period_active = start_date is not None and end_date is not None
 
@@ -127,6 +128,42 @@ def render_role_tab(
             st.dataframe(table_filtered, use_container_width=True, hide_index=True)
         else:
             st.info(f"В выбранном периоде нет активности по направлению {role_title}.")
+
+        if period_active and global_summary_df is not None and "finished_at" in global_summary_df.columns:
+            finished_dt = pd.to_datetime(global_summary_df["finished_at"], errors="coerce")
+            start_ts = pd.Timestamp(start_date)
+            end_ts = pd.Timestamp(end_date) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+            in_period = finished_dt.between(start_ts, end_ts)
+            finished_in_period = global_summary_df[in_period]
+            finished_with_work = finished_in_period[finished_in_period.get(work_status_col, 0) > 0]
+            st.markdown("---")
+            st.markdown(f"##### Завершённые в периоде задачи с работой {role_title} > 0")
+            st.caption(f"Всего завершено в периоде: {len(finished_in_period)} | С работой {role_title} > 0: {len(finished_with_work)}")
+            if not finished_with_work.empty:
+                executor_map = {}
+                if not iter_p.empty and actor_col_name in iter_p.columns:
+                    executor_map = iter_p.groupby("Задача")[actor_col_name].apply(
+                        lambda x: ", ".join(x.dropna().astype(str).unique())
+                    ).to_dict()
+                
+                display_df = finished_with_work.copy()
+                display_df["Исполнитель"] = display_df["Задача"].map(executor_map).fillna("")
+                
+                display_cols = ["Задача", "Исполнитель", "finished_at", work_status_col]
+                if queue_status_col in display_df.columns:
+                    display_cols.append(queue_status_col)
+                if cycle_col in display_df.columns:
+                    display_cols.append(cycle_col)
+                if flow_col in display_df.columns:
+                    display_cols.append(flow_col)
+                display_cols = [c for c in display_cols if c in display_df.columns]
+                st.dataframe(
+                    display_df[display_cols].sort_values("finished_at"),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+            else:
+                st.info(f"Нет завершённых в периоде задач с работой {role_title} > 0.")
 
     with sub_tabs[1]:
         if not iter_p.empty and actor_col_name in iter_p.columns:

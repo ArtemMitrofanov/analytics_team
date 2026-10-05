@@ -295,6 +295,7 @@ def run_streamlit_app():
                         work_start_h=work_start_h,
                         work_end_h=work_end_h,
                         net_ratio=net_ratio,
+                        global_summary_df=global_summary_df,
                     )
 
                 elif tab_key == "dev":
@@ -318,6 +319,7 @@ def run_streamlit_app():
                         net_ratio=net_ratio,
                         wait_col="К разработке (д.)",
                         rev_col="Ревью кода (д.)",
+                        global_summary_df=global_summary_df,
                     )
 
                 elif tab_key == "analytics":
@@ -341,6 +343,7 @@ def run_streamlit_app():
                         net_ratio=net_ratio,
                         wait_col="К аналитике (д.)",
                         rev_col="Ревью аналитики (д.)",
+                        global_summary_df=global_summary_df,
                     )
 
                 elif tab_key == "detail":
