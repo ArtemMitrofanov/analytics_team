@@ -1,16 +1,84 @@
 """auth.py — Аутентификация и управление сессией."""
 import streamlit as st
+import os
+from pathlib import Path
+import uuid
+from streamlit.components.v1 import declare_component
 from access_control import (
     get_user_role, get_available_tabs, get_tab_labels,
     verify_password, get_all_users, get_user_display_name
 )
-from access_control import Role
+from access_control import Role, USERS
+from auth_sessions import SessionStore, SESSION_TTL
+
+cookie_component = declare_component(
+    "analytics_session_cookie", path=str(Path(__file__).parent / "ui" / "session_cookie")
+)
+
+
+@st.cache_resource
+def _session_store(path):
+    return SessionStore(path)
+
+
+def _store():
+    return _session_store(os.environ.get(
+        "ANALYTICS_SESSION_DB", str(Path(__file__).parent / "data" / "auth_sessions.sqlite3")
+    ))
+
+
+def _cookie_request(operation, **kwargs):
+    st.session_state.auth_cookie_request = dict(
+        operation=operation, request_id=uuid.uuid4().hex, **kwargs
+    )
+
+
+def _clear_login():
+    for key in ("user_name", "user_role", "auth_session_token", "auth_pending_user"):
+        st.session_state.pop(key, None)
+
+
+def _restore_browser_session():
+    if "auth_cookie_request" not in st.session_state:
+        _cookie_request("read")
+    request = st.session_state.auth_cookie_request
+    response = cookie_component(**request, ttl=SESSION_TTL, key="auth_cookie", default=None)
+    operation = request["operation"]
+    if operation != "idle":
+        if not isinstance(response, dict) or response.get("request_id") != request["request_id"]:
+            st.caption("Восстанавливаем сессию…" if operation == "read" else "Сохраняем сессию…")
+            st.stop()
+        if operation == "read":
+            token = response.get("token", "")
+            username = _store().resolve(token, USERS)
+            if username:
+                st.session_state.user_name = username
+                st.session_state.auth_session_token = token
+        elif operation == "set":
+            if response.get("ok"):
+                st.session_state.user_name = st.session_state.auth_pending_user
+                st.session_state.auth_session_token = request["token"]
+            else:
+                _store().revoke(request["token"])
+                _clear_login()
+                st.session_state.auth_cookie_error = "Браузер блокирует cookie. Разрешите cookie для этого сайта."
+        elif operation == "delete":
+            _clear_login()
+        _cookie_request("idle")
+
+    token = st.session_state.get("auth_session_token")
+    username = _store().resolve(token, USERS)
+    if username:
+        st.session_state.user_name = username
+        st.session_state.user_role = get_user_role(username)
+        return True
+    _clear_login()
+    return False
 
 
 def render_login_page() -> bool:
     """Рендерит страницу входа в центре экрана. Возвращает True если авторизован."""
-    # Если уже залогинен — возвращаем True (информацию в сайдбаре рисует render_user_info_sidebar)
-    if "user_name" in st.session_state:
+    if _restore_browser_session():
         return True
 
     # Центрированная форма входа
@@ -18,6 +86,8 @@ def render_login_page() -> bool:
     with col2:
         st.markdown("## 🔐 Вход в систему")
         st.markdown("---")
+        if st.session_state.get("auth_cookie_error"):
+            st.error(st.session_state.auth_cookie_error)
 
         all_users = get_all_users()
 
@@ -37,9 +107,10 @@ def render_login_page() -> bool:
                 elif not password:
                     st.error("Введите пароль")
                 elif verify_password(user_name, password):
-                    st.session_state.user_name = user_name
-                    st.session_state.user_role = get_user_role(user_name)
-                    st.success("✅ Успешный вход!")
+                    token = _store().create(user_name, USERS[user_name]["password_hash"])
+                    st.session_state.auth_pending_user = user_name
+                    st.session_state.pop("auth_cookie_error", None)
+                    _cookie_request("set", token=token)
                     st.rerun()
                 else:
                     st.error("❌ Неверный пароль")
@@ -59,9 +130,9 @@ def render_user_info_sidebar():
         st.success(f"**{display_name}**")
         st.caption(f"Роль: {st.session_state.user_role}")
         if st.button("Выйти", type="secondary", use_container_width=True):
-            for key in ["user_name", "user_role"]:
-                if key in st.session_state:
-                    del st.session_state[key]
+            _store().revoke(st.session_state.get("auth_session_token"))
+            _clear_login()
+            _cookie_request("delete")
             st.rerun()
         st.markdown("---")
 

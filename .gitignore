@@ -43,3 +43,4 @@ build/
 analytics.duckdb
 *.duckdb
 *.duckdb.wal
+*.sqlite3*

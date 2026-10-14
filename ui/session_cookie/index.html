@@ -1,0 +1,36 @@
+<!doctype html>
+<html><head><meta charset="utf-8"></head><body><script>
+"use strict";
+const cookieName = "analytics_team_session";
+let handledRequest;
+function send(type, extra = {}) {
+  window.parent.postMessage({isStreamlitMessage: true, type, ...extra}, "*");
+}
+function readCookie() {
+  const item = document.cookie.split(";").map(x => x.trim())
+    .find(x => x.startsWith(cookieName + "="));
+  return item ? decodeURIComponent(item.slice(cookieName.length + 1)) : "";
+}
+window.addEventListener("message", event => {
+  if (event.source !== window.parent || event.data.type !== "streamlit:render") return;
+  const args = event.data.args;
+  if (args.request_id === handledRequest) return;
+  handledRequest = args.request_id;
+  let value = {request_id: args.request_id};
+  const flags = "; Path=/; SameSite=Lax" + (location.protocol === "https:" ? "; Secure" : "");
+  try {
+    if (args.operation === "read") value.token = readCookie();
+    else if (args.operation === "set") {
+      document.cookie = cookieName + "=" + encodeURIComponent(args.token)
+        + "; Max-Age=" + args.ttl + flags;
+      value.ok = readCookie() === args.token;
+    } else if (args.operation === "delete") {
+      document.cookie = cookieName + "=; Max-Age=0" + flags;
+      value.ok = readCookie() === "";
+    } else return;
+  } catch (_) { value.ok = false; value.error = true; }
+  send("streamlit:setComponentValue", {value, dataType: "json"});
+});
+send("streamlit:componentReady", {apiVersion: 1});
+send("streamlit:setFrameHeight", {height: 0});
+</script></body></html>

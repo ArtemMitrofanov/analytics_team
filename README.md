@@ -1,151 +1,185 @@
 # Team Process Analytics
 
-Комплексный процессный аудит команды — сквозная аналитика задач (Lead Time, Flow Efficiency, цикл разработки/тестирования/аналитики, SLA, реворки).
+Комплексный процессный аудит команды: Lead Time, Flow Efficiency, цикл разработки, тестирования и аналитики, SLA и реворки.
 
-## Требования
+## Требования и зависимости
 
-- Python 3.10+
-- Зависимости см. в `pyproject.toml`
+Проверенная конфигурация — **Python 3.12**, Streamlit 1.37.0, Pandas 2.2.2,
+NumPy 1.26.4, PyArrow 17.0.0 и DuckDB 1.5.5. Метаданные проекта допускают
+Python 3.10+, но сервер и приведённые ниже команды проверялись на Python 3.12.
+Основные зависимости заданы в `pyproject.toml`, все установленные версии — в
+`requirements.lock.txt`.
 
-## Установка (локально)
+**Не обновляйте PyArrow отдельно:** PyArrow 26.0.0 требует NumPy 2 и вызывает
+`ImportError` при отображении таблиц с NumPy 1.26.4. Устанавливайте зависимости
+из lock-файла. Перед заменой версии DuckDB сделайте резервную копию базы:
+файл, созданный другой версией, может оказаться несовместимым.
+
+## Локальный запуск
 
 ```bash
-pip install -e .
-# или
-pip install pandas==2.2.2 numpy==1.26.4 streamlit==1.37.0 plotly==5.22.0 duckdb==1.1.0
-```
-
-## Запуск (локально)
-
-```bash
+git clone https://github.com/ArtemMitrofanov/analytics_team.git
+cd analytics_team
+python3.12 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.lock.txt
 streamlit run main.py
 ```
 
-После запуска откроется браузер по адресу `http://localhost:8501`.
-
----
-
-## 🐳 Запуск в Docker (рекомендуется для продакшена)
-
-Docker обеспечивает **персистентность базы данных** между перезапусками контейнера через volume.
-
-### Быстрый старт
+Откройте `http://localhost:8501`. Администратор может загрузить CSV-файлы;
+на новой установке база пуста. Для проверки зависимостей:
 
 ```bash
-# Сборка и запуск в фоне
-docker compose up --build -d
-
-# Логи
-docker compose logs -f app
-
-# Остановка (данные БД сохраняются в ./data/)
-docker compose down
-
-# Полная очистка с удалением данных БД
-docker compose down -v
+python -m pip check
+python -c "import numpy, pandas, pyarrow; print(numpy.__version__, pandas.__version__, pyarrow.__version__)"
 ```
 
-Приложение доступно на `http://localhost:8501`.
+## Авторизация и сохранение входа при F5
 
-### Как это работает
+После успешного входа браузер получает случайный токен сессии в cookie.
+Сервер сохраняет только SHA-256-хэш токена, имя пользователя, отпечаток его
+пароля и срок действия в отдельной SQLite-базе. Пароль и роль не передаются
+в cookie: роль каждый раз берётся из серверной конфигурации.
 
-| Файл | Назначение |
-|------|------------|
-| `Dockerfile` | Образ приложения на базе `python:3.12-slim` |
-| `docker-compose.yml` | Сервис `app` с пробросом порта 8501 и монтированием `./data:/app/data` |
-| `.dockerignore` | Исключает локальные `__pycache__`, `.pytest_cache`, `*.duckdb`, `data/`, `.git` |
-| `db.py` | Читает путь к БД из переменной окружения `DUCKDB_PATH` (по умолчанию `/app/data/analytics.duckdb`) |
+- Вход сохраняется при F5, открытии другой вкладки этого сайта и перезапуске приложения.
+- Сессия действует **7 дней с момента входа**. Обновление страницы не продлевает срок.
+- Кнопка **«Выйти»** отзывает текущий токен на сервере и удаляет cookie. Повторное использование этого токена не даёт доступа.
+- Смена пароля или удаление пользователя делает его прежние токены недействительными. После изменения файла пользователей перезапустите приложение.
+- В браузере должны быть разрешены cookie для сайта. До их загрузки приложение показывает «Восстанавливаем сессию…».
 
-### Структура данных на хосте
+Cookie имеет `Path=/` и `SameSite=Lax`; при HTTPS добавляется `Secure`.
+Он устанавливается компонентом JavaScript и не имеет `HttpOnly`.
+Для публичного размещения настройте HTTPS в обратном прокси.
 
-```
-./data/
-├── analytics.duckdb          # Файл БД DuckDB (создаётся при первом запуске)
-```
+### Настройка пользователей
 
-**Важно:** папка `./data/` монтируется как volume — при `docker compose down` данные **не удаляются**. Только `docker compose down -v` удаляет volume.
+Без `ANALYTICS_USERS_FILE` используются демонстрационные пользователи из
+`access_control.py`. Для локальной проверки доступны «Администратор»
+(`admin` / `admin123`) и роли `guest`, `analyst`, `developer`, `tester`.
+На новом сервере установщик генерирует собственные случайные пароли для всех ролей.
 
-### Переменные окружения (docker-compose.yml)
-
-```yaml
-environment:
-  - PYTHONUNBUFFERED=1
-  - DUCKDB_PATH=/app/data/analytics.duckdb
-```
-
-### Бэкап базы данных
+Для внешней конфигурации задайте путь к JSON-файлу:
 
 ```bash
-# Остановить контейнер для консистентного бэкапа
-docker compose down
-
-# Скопировать файл БД
-cp ./data/analytics.duckdb ./backups/analytics_$(date +%F).duckdb
-
-# Запустить снова
-docker compose up -d
+export ANALYTICS_USERS_FILE=/etc/analytics-team/users.json
 ```
 
-### Обновление приложения
+Формат файла — словарь пользователей. `password_hash` — 64 шестнадцатеричных
+символа SHA-256 пароля; пароль открытым текстом в этот файл не записывается.
+
+```json
+{
+  "admin": {
+    "password_hash": "<SHA256_ПАРОЛЯ: 64 шестнадцатеричных символа>",
+    "role": "admin",
+    "display_name": "Администратор"
+  }
+}
+```
+
+При заданной переменной этот файл **полностью заменяет** демонстрационные
+учётные записи. Отсутствующий или некорректный файл не позволяет запустить
+приложение. Поддерживаемые роли: `admin`, `guest`, `analyst`, `developer`, `tester`.
+Получить хэш без помещения пароля в историю команд:
 
 ```bash
-# Получить изменения
-git pull
-
-# Пересобрать и перезапустить (данные сохранятся)
-docker compose up --build -d
+python - <<'PY_HASH'
+import getpass, hashlib
+print(hashlib.sha256(getpass.getpass('Пароль: ').encode()).hexdigest())
+PY_HASH
 ```
 
-### Named Volume (альтернатива для продакшена)
+### Пути к данным
 
-В `docker-compose.yml` можно использовать named volume вместо bind mount:
+| Переменная | Значение по умолчанию при локальном запуске | Назначение |
+|------------|--------------------------------------------|------------|
+| `DUCKDB_PATH` | `data/analytics.duckdb` | События и загруженные CSV |
+| `ANALYTICS_SESSION_DB` | `data/auth_sessions.sqlite3` | Постоянные сессии авторизации |
+| `ANALYTICS_USERS_FILE` | Не задана | Внешние пользователи вместо демонстрационных |
 
-```yaml
-volumes:
-  duckdb_data:
+Оба файла баз данных и их служебные файлы исключены из Git. Каталоги баз
+должны быть доступны процессу приложения для записи.
 
-services:
-  app:
-    volumes:
-      - duckdb_data:/app/data
-```
+## Развёртывание на Ubuntu 24.04: systemd и Nginx
 
-Плюсы: переносимость, управление через `docker volume`, работает в Swarm/K8s.
+Скрипт `deploy/install.sh` воспроизводит использованный способ развёртывания:
+отдельный служебный пользователь, Python venv, автозапуск, постоянные данные
+и Nginx с поддержкой WebSocket. Он предназначен для **чистого сервера** с root-доступом.
+Откройте входящие порты 22 и 80 в firewall провайдера.
 
----
+На своём компьютере скачайте скрипт из репозитория и отправьте на новый сервер:
 
-## ⚠️ Важно: Совместимость версий DuckDB
-
-**DuckDB не гарантирует обратную совместимость формата файла БД между мажорными версиями.**
-
-Если файл `analytics.duckdb` создан версией `1.5.x`, а в контейнере стоит `1.0.x` (или наоборот) — будет ошибка:
-```
-SerializationException: Failed to deserialize: expected end of object...
-```
-
-### Решение:
-Убедитесь, что версия в `pyproject.toml` совпадает с локальной:
-```toml
-dependencies = [
-    ...
-    "duckdb==1.5.5",  # должна совпадать с версией, создававшей файл БД
-]
-```
-
-Проверить версию:
 ```bash
-# Локально
-python3 -c "import duckdb; print(duckdb.__version__)"
-
-# В контейнере
-docker compose exec app python3 -c "import duckdb; print(duckdb.__version__)"
+scp deploy/install.sh root@SERVER_IP:/root/analytics-install.sh
+ssh root@SERVER_IP
+bash /root/analytics-install.sh > /root/analytics-team-install.log 2>&1
+tail -n 30 /root/analytics-team-install.log
 ```
 
-Если версии расходятся:
-1. Обновите `pyproject.toml`
-2. Пересоберите образ: `docker compose up --build -d`
+Скрипт клонирует `main` и устанавливает зависимости из lock-файла. Для конкретной
+версии задайте перед запуском `ANALYTICS_REF=<commit SHA или ветка>`.
+Если `/opt/analytics-team` уже существует, скрипт остановится. Он отключает
+стандартный сайт Nginx и делает приложение сайтом по умолчанию на порту 80:
+на сервере с другими сайтами адаптируйте конфигурацию перед запуском.
 
-> **Совет:** Фиксируйте версию DuckDB в `pyproject.toml` (не используйте `duckdb>=x.y`), чтобы избежать неожиданных обновлений при пересборке.
+| Назначение | Путь / адрес на сервере |
+|------------|-------------------------|
+| Исходники и venv | `/opt/analytics-team`, `/opt/analytics-team/.venv` |
+| База аналитики | `/var/lib/analytics-team/analytics.duckdb` |
+| Сессии входа | `/var/lib/analytics-team/auth_sessions.sqlite3` |
+| Пользователи | `/etc/analytics-team/users.json` (root:analytics-team, 0640) |
+| Сгенерированные пароли | `/root/analytics-team-credentials.txt` (0600) |
+| Служба | `/etc/systemd/system/analytics-team.service` |
+| Nginx | `/etc/nginx/sites-available/analytics-team` |
+| Streamlit | `127.0.0.1:8501`, доступен только внутри сервера |
+| Внешний интерфейс | `http://SERVER_IP/` |
+
+Откройте сайт, выберите «Администратор» и используйте сгенерированный пароль
+`admin` из приватного файла на сервере. Это отдельный пароль приложения,
+а не пароль SSH. Для HTTPS направьте домен на сервер и настройте сертификат
+в Nginx. До настройки HTTPS можно использовать шифрованный SSH-туннель:
+
+```bash
+ssh -N -L 18501:127.0.0.1:8501 root@SERVER_IP
+```
+
+После подключения откройте `http://localhost:18501/`.
+
+### Проверки и журналы
+
+```bash
+systemctl is-active analytics-team nginx
+systemctl is-enabled analytics-team nginx
+curl -f http://127.0.0.1:8501/_stcore/health
+curl -f http://127.0.0.1/_stcore/health
+journalctl -u analytics-team -n 100 --no-pager
+nginx -t
+```
+
+Проверьте вход, отображение таблиц после загрузки CSV, F5 и выход.
+Одного ответа `ok` от health endpoint недостаточно для проверки интерфейса.
+
+### Резервная копия
+
+Остановите приложение перед копированием обеих баз. Сохраните также
+пользователей и точные версии зависимостей; храните архив приватно.
+
+```bash
+set -e
+install -d -m 0700 /root/analytics-backups
+BACKUP="/root/analytics-backups/analytics-$(date +%F-%H%M%S).tar.gz"
+systemctl stop analytics-team
+trap 'systemctl start analytics-team' EXIT
+tar -czf "$BACKUP" -C / var/lib/analytics-team etc/analytics-team
+chmod 0600 "$BACKUP"
+systemctl start analytics-team
+trap - EXIT
+```
+
+`data/` содержит Python-модули обработки задач. Не монтируйте поверх него
+пустой каталог базы данных. Текущие файлы Docker относятся к прежнему способу
+запуска и не использовались при этом развёртывании; перед их применением
+нужно адаптировать сборку и пути томов. Выше приведён проверенный путь systemd/Nginx.
 
 ---
 
@@ -309,8 +343,12 @@ timestamp,changed_value,added_values,removed_values,author_full_name,issue_id
 ├── config.py               # Константы, статусы, загрузка team.json
 ├── config/
 │   └── team.json           # Состав Core Teams (QA, Dev, Analytics)
+├── auth.py                 # Вход, восстановление cookie, выход
+├── auth_sessions.py        # SQLite: выдача, проверка и отзыв токенов
 ├── db.py                   # DuckDB: загрузка, дедупликация, запросы
-├── pyproject.toml          # Зависимости
+├── pyproject.toml          # Основные зависимости
+├── requirements.lock.txt   # Зафиксированные версии всех зависимостей
+├── deploy/install.sh       # Установка на чистую Ubuntu 24.04
 ├── README.md
 ├── data/
 │   ├── pipeline.py         # Пакетная обработка; кэш стучится по отпечатку БД (get_db_fingerprint),
@@ -325,17 +363,26 @@ timestamp,changed_value,added_values,removed_values,author_full_name,issue_id
 │   └── stats.py            # Mean/Median/P85
 ├── ui/
 │   ├── components.py       # UI-компоненты
+│   ├── session_cookie/     # Компонент чтения и записи cookie
 │   └── tabs/               # Рендереры вкладок
-└── tests/                  # 92 теста
+└── tests/                  # 99 тестов
 ```
 
 ## Тестирование
 
 ```bash
-python3 -m pytest tests/ -v
+python -m pip install pytest==8.3.5
+TEST_DIR=$(mktemp -d)
+DUCKDB_PATH="$TEST_DIR/test.duckdb" python -m pytest tests/ -v
+rm -rf "$TEST_DIR"
 ```
 
-### Набор тестов (92 теста)
+Тесты DuckDB очищают тестовую базу. Всегда задавайте отдельный `DUCKDB_PATH`,
+особенно на рабочем сервере. Тесты сессий используют собственные временные базы;
+в тестах браузера cookie-компонент имитируется. F5 и выход дополнительно проверены
+в Chrome на развёрнутом приложении.
+
+### Набор тестов (99 тестов)
 
 | Файл | Тестов | Описание |
 |------|--------|----------|
@@ -347,11 +394,18 @@ python3 -m pytest tests/ -v
 | `test_metrics.py` | 14 | `recompute_role_period_metrics`: фильтрация итераций по периоду (внутри/вне/пересекает/пусто), пересчёт QA (нет итераций в периоде, одна итерация, смешанные периоды, очередь из wait_df, wait вне периода, без wait_df → 0), Dev (отдельные wait/rev), Analytics (отдельные wait/rev), неизвестная роль, пустой summary |
 | `test_db.py` | 16 | DuckDB: row_hash (одинаковые/разные поля), file_hash, первая загрузка, дедуп по row_hash/file_hash, `is_file_loaded`, `get_all_events`, `get_summary_stats`, очистка БД |
 
+| `test_ui_runtime.py` | 1 | Отображение таблицы Streamlit с NumPy, Pandas и PyArrow |
+| `test_auth_sessions.py` | 4 | Сохранение токена между процессами, подделка, срок действия, смена пароля и отзыв |
+| `test_auth_refresh.py` | 2 | Вход → новая сессия → выход, запрет повторного использования токена, ожидание cookie |
+
 ### Структура тестов
 
 ```
 tests/
 ├── conftest.py              # добавляет корень проекта в sys.path
+├── test_auth_sessions.py
+├── test_auth_refresh.py
+├── test_ui_runtime.py
 ├── test_time_calc.py
 ├── test_stats.py
 ├── test_validation.py
@@ -363,5 +417,8 @@ tests/
 
 Запуск с покрытием:
 ```bash
-python3 -m pytest tests/ -v --cov=. --cov-report=term-missing
+python -m pip install pytest-cov
+TEST_DIR=$(mktemp -d)
+DUCKDB_PATH="$TEST_DIR/test.duckdb" python -m pytest tests/ -v --cov=. --cov-report=term-missing
+rm -rf "$TEST_DIR"
 ```

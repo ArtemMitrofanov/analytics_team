@@ -2,6 +2,10 @@
 from typing import Literal
 import pandas as pd
 import hashlib
+import hmac
+import json
+import os
+from pathlib import Path
 
 Role = Literal["admin", "guest", "analyst", "developer", "tester"]
 
@@ -70,6 +74,25 @@ USERS = {
     },
 }
 
+# На сервере файл с хэшами полностью заменяет демонстрационные учётные записи.
+if os.environ.get("ANALYTICS_USERS_FILE"):
+    with Path(os.environ["ANALYTICS_USERS_FILE"]).open(encoding="utf-8") as f:
+        configured_users = json.load(f)
+    if not isinstance(configured_users, dict) or not configured_users:
+        raise ValueError("ANALYTICS_USERS_FILE должен содержать пользователей")
+    for username, user in configured_users.items():
+        if (
+            not isinstance(username, str)
+            or not isinstance(user, dict)
+            or user.get("role") not in ROLE_TABS
+            or not isinstance(user.get("display_name"), str)
+            or not isinstance(user.get("password_hash"), str)
+            or len(user["password_hash"]) != 64
+            or any(c not in "0123456789abcdef" for c in user["password_hash"])
+        ):
+            raise ValueError("Некорректная запись пользователя в ANALYTICS_USERS_FILE")
+    USERS = configured_users
+
 USERNAMES = list(USERS.keys())
 
 
@@ -93,7 +116,7 @@ def verify_password(username: str, password: str) -> bool:
     user = USERS.get(username)
     if not user:
         return False
-    return user["password_hash"] == _hash(password)
+    return hmac.compare_digest(user["password_hash"], _hash(password))
 
 
 def get_all_users() -> list[str]:
