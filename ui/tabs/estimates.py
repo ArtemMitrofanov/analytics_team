@@ -12,7 +12,7 @@ def render_estimates_tab(
     dev_iter_df: pd.DataFrame,
     an_iter_df: pd.DataFrame
 ):
-    st.subheader("🎯 Анализ точности и калибровка оценок задач (T-Shirt Sizes)")
+    st.subheader("🎯 Анализ точности и калибровка оценок задач")
     st.caption("Сопоставление плановых и фактических размеров (XS, S, M, L, XL) и калибровка фактическими рабочими днями")
 
     est_df = summary_df.copy()
@@ -49,9 +49,9 @@ def render_estimates_tab(
     st.markdown("#### 1. Калибровка T-Shirt размеров фактическими днями")
 
     est_role_qa, est_role_dev, est_role_an = st.tabs([
-        "🧪 Тестирование (QA)",
-        "💻 Разработка (Dev)",
-        "📐 Аналитика (Analytics)",
+        "🧪 Тестирование",
+        "💻 Разработка",
+        "📐 Аналитика",
     ])
 
     def render_calibration(role_name: str, plan_col: str, fact_col: str, days_col: str, data: pd.DataFrame, iter_df: pd.DataFrame = None, core_team: list = None, actor_col: str = "Исполнитель"):

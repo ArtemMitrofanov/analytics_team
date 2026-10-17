@@ -21,6 +21,7 @@ from ui.tabs.types import render_types_tab
 from ui.tabs.priorities import render_priorities_tab
 from ui.tabs.role_view import render_role_tab
 from ui.tabs.task_detail import render_task_detail_tab
+from ui.theme import inject_theme
 from db import (
     get_all_events, get_summary_stats, clear_database, get_db_fingerprint
 )
@@ -50,7 +51,13 @@ def run_streamlit_app():
     import streamlit as st
     from db import make_file_hash, load_dataframe_to_db, is_file_loaded
 
-    st.set_page_config(page_title="Team Process Analytics", page_icon="📊", layout="wide")
+    st.set_page_config(
+        page_title="Team Process Analytics",
+        page_icon="📊",
+        layout="wide",
+        initial_sidebar_state="collapsed",
+    )
+    inject_theme()
     st.title("📊 Комплексный процессный аудит команды")
 
     # --- АУТЕНТИФИКАЦИЯ (сразу после title) ---
@@ -61,8 +68,60 @@ def run_streamlit_app():
     user_role = st.session_state.user_role
     is_admin = user_role == "admin"
 
+    # Читаем все события из DuckDB для аналитики
+    full_raw_df = get_all_events()
+
+    periods_m = sorted(full_raw_df["timestamp"].dt.to_period("M").unique())
+    monthly_sprints_list = [
+        {
+            "period_name": f"{MONTH_NAMES_RU.get(p.month, str(p.month))} {p.year}",
+            "start_date": p.start_time.date(),
+            "end_date": p.end_time.date()
+        }
+        for p in periods_m
+    ]
+    sprint_lookup = {
+        f"Спринт: {item['period_name']}": (item["start_date"], item["end_date"])
+        for item in monthly_sprints_list
+    }
+
+    periods_q = sorted(full_raw_df["timestamp"].dt.to_period("Q").unique())
+    quarter_list = [
+        {
+            "period_name": f"Q{q.quarter} {q.year}",
+            "start_date": q.start_time.date(),
+            "end_date": q.end_time.date()
+        }
+        for q in periods_q
+    ]
+    quarter_lookup = {
+        f"Квартал: {item['period_name']}": (item["start_date"], item["end_date"])
+        for item in quarter_list
+    }
+
     with st.sidebar:
         render_user_info_sidebar()
+        period_mode = st.radio(
+            "Группировка периода:",
+            options=["Весь период", "По месяцам (Спринты)", "По кварталам", "Пользовательский диапазон"],
+            index=0,
+        )
+        if period_mode == "По месяцам (Спринты)":
+            sel_label = st.selectbox("Выберите спринт:", options=list(sprint_lookup.keys()))
+            start_date, end_date = sprint_lookup[sel_label]
+        elif period_mode == "По кварталам":
+            sel_label = st.selectbox("Выберите квартал:", options=list(quarter_lookup.keys()))
+            start_date, end_date = quarter_lookup[sel_label]
+        elif period_mode == "Пользовательский диапазон":
+            min_d, max_d = full_raw_df["timestamp"].min().date(), full_raw_df["timestamp"].max().date()
+            d_range = st.date_input("Диапазон", value=(min_d, max_d))
+            start_date, end_date = d_range if isinstance(d_range, tuple) and len(d_range) == 2 else (min_d, max_d)
+            sel_label = f"{start_date} — {end_date}"
+        else:
+            start_date, end_date = full_raw_df["timestamp"].min().date(), full_raw_df["timestamp"].max().date()
+            sel_label = "Весь период"
+
+        st.markdown("---")
         st.header("⚙️ Параметры анализа")
         work_start_h = st.number_input("Начало дня (час)", 0, 23, 9)
         work_end_h = st.number_input("Конец дня (час)", 0, 23, 18)
@@ -86,9 +145,6 @@ def run_streamlit_app():
                 st.success("База очищена")
                 st.rerun()
 
-    # Читаем все события из DuckDB для аналитики
-    full_raw_df = get_all_events()
-
     # Загрузка файлов — только для админа
     if is_admin:
         uploaded_files = st.file_uploader("Загрузите CSV-файлы журнала задач", type=["csv"], accept_multiple_files=True)
@@ -105,7 +161,6 @@ def run_streamlit_app():
                 
                 # Проверка: файл уже загружен?
                 if is_file_loaded(file_hash):
-                    st.info(f"⏭ {f.name} — уже загружен ранее (пропущен)")
                     continue
                 
                 f.seek(0)
@@ -160,56 +215,6 @@ def run_streamlit_app():
         get_db_fingerprint(), work_start_h, work_end_h, net_ratio, net_day_hours
     )
 
-    periods_m = sorted(full_raw_df["timestamp"].dt.to_period("M").unique())
-    monthly_sprints_list = [
-        {
-            "period_name": f"{MONTH_NAMES_RU.get(p.month, str(p.month))} {p.year}",
-            "start_date": p.start_time.date(),
-            "end_date": p.end_time.date()
-        }
-        for p in periods_m
-    ]
-    sprint_lookup = {
-        f"Спринт: {item['period_name']}": (item["start_date"], item["end_date"])
-        for item in monthly_sprints_list
-    }
-
-    periods_q = sorted(full_raw_df["timestamp"].dt.to_period("Q").unique())
-    quarter_list = [
-        {
-            "period_name": f"Q{q.quarter} {q.year}",
-            "start_date": q.start_time.date(),
-            "end_date": q.end_time.date()
-        }
-        for q in periods_q
-    ]
-    quarter_lookup = {
-        f"Квартал: {item['period_name']}": (item["start_date"], item["end_date"])
-        for item in quarter_list
-    }
-
-    with st.sidebar:
-        st.markdown("---")
-        period_mode = st.radio(
-            "Группировка периода:",
-            options=["Весь период", "По месяцам (Спринты)", "По кварталам", "Пользовательский диапазон"],
-            index=0,
-        )
-        if period_mode == "По месяцам (Спринты)":
-            sel_label = st.selectbox("Выберите спринт:", options=list(sprint_lookup.keys()))
-            start_date, end_date = sprint_lookup[sel_label]
-        elif period_mode == "По кварталам":
-            sel_label = st.selectbox("Выберите квартал:", options=list(quarter_lookup.keys()))
-            start_date, end_date = quarter_lookup[sel_label]
-        elif period_mode == "Пользовательский диапазон":
-            min_d, max_d = full_raw_df["timestamp"].min().date(), full_raw_df["timestamp"].max().date()
-            d_range = st.date_input("Диапазон", value=(min_d, max_d))
-            start_date, end_date = d_range if isinstance(d_range, tuple) and len(d_range) == 2 else (min_d, max_d)
-            sel_label = f"{start_date} — {end_date}"
-        else:
-            start_date, end_date = full_raw_df["timestamp"].min().date(), full_raw_df["timestamp"].max().date()
-            sel_label = "Весь период"
-
     if period_mode == "Весь период":
         active_tids = global_summary_df["Задача"].dropna().unique()
     else:
@@ -246,109 +251,117 @@ def run_streamlit_app():
         dev_iter_df = filter_iter_df_by_role(dev_iter_df, user_role, user_name)
         an_iter_df = filter_iter_df_by_role(an_iter_df, user_role, user_name)
 
-        # Динамически создаём вкладки на основе роли
+        # Динамически создаём навигацию на основе роли
         tabs_to_render = [tab for tab in [
             "overview", "periods", "estimates", "deadlines", "types", "priorities",
             "qa", "dev", "analytics", "detail"
         ] if tab in available_tabs]
 
-        tab_objects = st.tabs([tab_labels[t] for t in tabs_to_render])
+        nav_labels = [tab_labels[t] for t in tabs_to_render]
+        nav_col, content_col = st.columns([1, 4])
+        with nav_col:
+            selected_label = st.radio(
+                "Разделы",
+                options=nav_labels,
+                key="main_nav",
+                label_visibility="collapsed",
+            )
+        selected_key = tabs_to_render[nav_labels.index(selected_label)]
 
-        for tab_key, tab_obj in zip(tabs_to_render, tab_objects):
-            with tab_obj:
-                if tab_key == "overview":
-                    render_overview_tab(summary_df, net_day_hours=net_day_hours)
+        with content_col:
+            if selected_key == "overview":
+                render_overview_tab(summary_df, net_day_hours=net_day_hours)
 
-                elif tab_key == "periods":
-                    render_periods_tab(monthly_sprints_list, quarter_list, full_raw_df, global_summary_df)
+            elif selected_key == "periods":
+                render_periods_tab(monthly_sprints_list, quarter_list, full_raw_df, global_summary_df)
 
-                elif tab_key == "estimates":
-                    render_estimates_tab(summary_df, qa_iter_df, dev_iter_df, an_iter_df)
+            elif selected_key == "estimates":
+                render_estimates_tab(summary_df, qa_iter_df, dev_iter_df, an_iter_df)
 
-                elif tab_key == "deadlines":
-                    render_deadlines_tab(summary_df)
+            elif selected_key == "deadlines":
+                render_deadlines_tab(summary_df)
 
-                elif tab_key == "types":
-                    render_types_tab(summary_df)
+            elif selected_key == "types":
+                render_types_tab(summary_df)
 
-                elif tab_key == "priorities":
-                    render_priorities_tab(summary_df)
+            elif selected_key == "priorities":
+                render_priorities_tab(summary_df)
 
-                elif tab_key == "qa":
-                    render_role_tab(
-                        role_title="QA",
-                        work_status_col="В тестировании (дни)",
-                        queue_status_col="Очередь ожидания QA (дни)",
-                        cycle_col="Циклтайм QA (дни)",
-                        flow_col="Flow Efficiency QA (%)",
-                        table_cols=["Задача", "В тестировании (дни)", "Очередь ожидания QA (дни)", "Циклтайм QA (дни)", "Flow Efficiency QA (%)"],
-                        iter_df=qa_iter_df,
-                        rev_df=pd.DataFrame(),
-                        wait_df=qa_wait_df,
-                        summary_df=summary_df,
-                        actor_col_name="Исполнитель",
-                        net_day_hours=net_day_hours,
-                        reworks_df=reworks_df,
-                        role_key="qa",
-                        start_date=None if period_mode == "Весь период" else start_date,
-                        end_date=None if period_mode == "Весь период" else end_date,
-                        work_start_h=work_start_h,
-                        work_end_h=work_end_h,
-                        net_ratio=net_ratio,
-                        global_summary_df=global_summary_df,
-                    )
+            elif selected_key == "qa":
+                render_role_tab(
+                    role_title="QA",
+                    work_status_col="В тестировании (дни)",
+                    queue_status_col="Очередь ожидания QA (дни)",
+                    cycle_col="Циклтайм QA (дни)",
+                    flow_col="Flow Efficiency QA (%)",
+                    table_cols=["Задача", "В тестировании (дни)", "Очередь ожидания QA (дни)", "Циклтайм QA (дни)", "Flow Efficiency QA (%)"],
+                    iter_df=qa_iter_df,
+                    rev_df=pd.DataFrame(),
+                    wait_df=qa_wait_df,
+                    summary_df=summary_df,
+                    actor_col_name="Исполнитель",
+                    net_day_hours=net_day_hours,
+                    reworks_df=reworks_df,
+                    role_key="qa",
+                    start_date=None if period_mode == "Весь период" else start_date,
+                    end_date=None if period_mode == "Весь период" else end_date,
+                    work_start_h=work_start_h,
+                    work_end_h=work_end_h,
+                    net_ratio=net_ratio,
+                    global_summary_df=global_summary_df,
+                )
 
-                elif tab_key == "dev":
-                    render_role_tab(
-                        role_title="Разработка",
-                        work_status_col="В разработке (д.)",
-                        queue_status_col="Очередь/Код Ревью Dev (д.)",
-                        cycle_col="Цикл Разработки (д.)",
-                        flow_col="Flow Разработки (%)",
-                        table_cols=["Задача", "К разработке (д.)", "В разработке (д.)", "К ревью (разработка) (д.)", "Ревью кода (д.)", "Цикл Разработки (д.)", "Flow Разработки (%)"],
-                        iter_df=dev_iter_df,
-                        rev_df=dev_rev_df,
-                        summary_df=summary_df,
-                        actor_col_name="Разработчик",
-                        net_day_hours=net_day_hours,
-                        role_key="dev",
-                        start_date=None if period_mode == "Весь период" else start_date,
-                        end_date=None if period_mode == "Весь период" else end_date,
-                        work_start_h=work_start_h,
-                        work_end_h=work_end_h,
-                        net_ratio=net_ratio,
-                        wait_col="К разработке (д.)",
-                        rev_col="Ревью кода (д.)",
-                        global_summary_df=global_summary_df,
-                    )
+            elif selected_key == "dev":
+                render_role_tab(
+                    role_title="Разработка",
+                    work_status_col="В разработке (д.)",
+                    queue_status_col="Очередь/Код Ревью Dev (д.)",
+                    cycle_col="Цикл Разработки (д.)",
+                    flow_col="Flow Разработки (%)",
+                    table_cols=["Задача", "К разработке (д.)", "В разработке (д.)", "К ревью (разработка) (д.)", "Ревью кода (д.)", "Цикл Разработки (д.)", "Flow Разработки (%)"],
+                    iter_df=dev_iter_df,
+                    rev_df=dev_rev_df,
+                    summary_df=summary_df,
+                    actor_col_name="Разработчик",
+                    net_day_hours=net_day_hours,
+                    role_key="dev",
+                    start_date=None if period_mode == "Весь период" else start_date,
+                    end_date=None if period_mode == "Весь период" else end_date,
+                    work_start_h=work_start_h,
+                    work_end_h=work_end_h,
+                    net_ratio=net_ratio,
+                    wait_col="К разработке (д.)",
+                    rev_col="Ревью кода (д.)",
+                    global_summary_df=global_summary_df,
+                )
 
-                elif tab_key == "analytics":
-                    render_role_tab(
-                        role_title="Аналитика",
-                        work_status_col="В аналитике (д.)",
-                        queue_status_col="Очередь/Ревью Аналитики (д.)",
-                        cycle_col="Цикл Аналитики (д.)",
-                        flow_col="Flow Аналитики (%)",
-                        table_cols=["Задача", "К аналитике (д.)", "В аналитике (д.)", "К ревью (аналитика) (д.)", "Ревью аналитики (д.)", "Цикл Аналитики (д.)", "Flow Аналитики (%)"],
-                        iter_df=an_iter_df,
-                        rev_df=an_rev_df,
-                        summary_df=summary_df,
-                        actor_col_name="Аналитик",
-                        net_day_hours=net_day_hours,
-                        role_key="an",
-                        start_date=None if period_mode == "Весь период" else start_date,
-                        end_date=None if period_mode == "Весь период" else end_date,
-                        work_start_h=work_start_h,
-                        work_end_h=work_end_h,
-                        net_ratio=net_ratio,
-                        wait_col="К аналитике (д.)",
-                        rev_col="Ревью аналитики (д.)",
-                        global_summary_df=global_summary_df,
-                    )
+            elif selected_key == "analytics":
+                render_role_tab(
+                    role_title="Аналитика",
+                    work_status_col="В аналитике (д.)",
+                    queue_status_col="Очередь/Ревью Аналитики (д.)",
+                    cycle_col="Цикл Аналитики (д.)",
+                    flow_col="Flow Аналитики (%)",
+                    table_cols=["Задача", "К аналитике (д.)", "В аналитике (д.)", "К ревью (аналитика) (д.)", "Ревью аналитики (д.)", "Цикл Аналитики (д.)", "Flow Аналитики (%)"],
+                    iter_df=an_iter_df,
+                    rev_df=an_rev_df,
+                    summary_df=summary_df,
+                    actor_col_name="Аналитик",
+                    net_day_hours=net_day_hours,
+                    role_key="an",
+                    start_date=None if period_mode == "Весь период" else start_date,
+                    end_date=None if period_mode == "Весь период" else end_date,
+                    work_start_h=work_start_h,
+                    work_end_h=work_end_h,
+                    net_ratio=net_ratio,
+                    wait_col="К аналитике (д.)",
+                    rev_col="Ревью аналитики (д.)",
+                    global_summary_df=global_summary_df,
+                )
 
-                elif tab_key == "detail":
-                    # Для детализации используем global_summary_df и все задачи (не отфильтрованные по роли)
-                    render_task_detail_tab(global_summary_df, all_active_tids)
+            elif selected_key == "detail":
+                # Для детализации используем global_summary_df и все задачи (не отфильтрованные по роли)
+                render_task_detail_tab(global_summary_df, all_active_tids)
 
 
 if __name__ == "__main__":

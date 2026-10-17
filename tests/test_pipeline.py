@@ -116,7 +116,7 @@ class TestProcessAllTasksCached:
 
         assert len(summary_df) == 1
         assert summary_df.iloc[0]["Задача"] == "TASK-1"
-        assert summary_df.iloc[0]["Тип задачи"] == "Дефект (Bug)"
+        assert summary_df.iloc[0]["Тип задачи"] == "Дефект"
         # Временные метрики должны быть нулевыми
         assert summary_df.iloc[0]["Полный Lead Time (д.)"] == 0.0
 

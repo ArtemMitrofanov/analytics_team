@@ -169,9 +169,9 @@ def render_periods_tab(
         st.markdown("#### 2. Динамика метрик и Flow по ролям")
 
         role_tab_qa, role_tab_dev, role_tab_an = st.tabs([
-            "🧪 Тестирование (QA)",
-            "💻 Разработка (Dev)",
-            "📐 Аналитика (Analytics)",
+            "🧪 Тестирование",
+            "💻 Разработка",
+            "📐 Аналитика",
         ])
 
         with role_tab_qa:

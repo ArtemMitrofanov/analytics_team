@@ -1,4 +1,4 @@
-"""ui/tabs/types.py — Анализ структуры потока: Дефекты (Bugs) vs Фичи (Tasks)."""
+"""ui/tabs/types.py — Анализ структуры потока: Дефекты и Фичи."""
 import pandas as pd
 import plotly.express as px
 import streamlit as st
@@ -6,16 +6,16 @@ from utils.stats import calc_stats
 
 
 def render_types_tab(summary_df: pd.DataFrame):
-    st.subheader("🐞 Анализ структуры потока: Дефекты (Bugs) vs Фичи / Задачи (Tasks)")
-    st.caption("Оценка баланса создания новой ценности (Value Demand) и устранения дефектов (Failure Demand)")
+    st.subheader("🐞 Анализ структуры потока: Дефекты и Фичи / Задачи")
+    st.caption("Оценка баланса создания новой ценности и устранения дефектов")
 
     types_df = summary_df.copy()
     if "Тип задачи" not in types_df.columns:
         st.info("Типы задач не определены в текущем наборе данных.")
         return
 
-    bugs_df = types_df[types_df["Тип задачи"] == "Дефект (Bug)"]
-    features_df = types_df[types_df["Тип задачи"].isin(["Фича / Задача (Task)", "Эпик (Epic)"])]
+    bugs_df = types_df[types_df["Тип задачи"] == "Дефект"]
+    features_df = types_df[types_df["Тип задачи"].isin(["Фича / Задача", "Эпик"])]
 
     total_cnt = len(types_df)
     bug_cnt = len(bugs_df)
@@ -28,8 +28,8 @@ def render_types_tab(summary_df: pd.DataFrame):
     feat_lt_m, feat_lt_med, feat_lt_p85, _ = calc_stats(features_df.get("Полный Lead Time (д.)", pd.Series(dtype=float)))
 
     t_c1, t_c2, t_c3, t_c4 = st.columns(4)
-    t_c1.metric("Доля дефектов (Failure Demand)", f"{bug_pct:.1f}%", f"{bug_cnt} багов", delta_color="inverse")
-    t_c2.metric("Доля фичей (Value Demand)", f"{feat_pct:.1f}%", f"{feat_cnt} задач/эпиков")
+    t_c1.metric("Доля дефектов", f"{bug_pct:.1f}%", f"{bug_cnt} багов", delta_color="inverse")
+    t_c2.metric("Доля фичей", f"{feat_pct:.1f}%", f"{feat_cnt} задач/эпиков")
     t_c3.metric("Lead Time Дефектов (Ср / P85)", f"{bug_lt_m:.1f} д.", f"P85: {bug_lt_p85:.1f} д.")
     t_c4.metric("Lead Time Фичей (Ср / P85)", f"{feat_lt_m:.1f} д.", f"P85: {feat_lt_p85:.1f} д.")
 
@@ -40,14 +40,14 @@ def render_types_tab(summary_df: pd.DataFrame):
         fig_type_pie = px.pie(
             types_df,
             names="Тип задачи",
-            title="Структура потока задач в периоде (Flow Distribution)",
+            title="Структура потока задач в периоде",
             hole=0.45,
             color="Тип задачи",
             color_discrete_map={
-                "Дефект (Bug)": "#d62728",
-                "Фича / Задача (Task)": "#1f77b4",
-                "Эпик (Epic)": "#9467bd",
-                "Эксплуатация (Run)": "#ff7f0e",
+                "Дефект": "#d62728",
+                "Фича / Задача": "#1f77b4",
+                "Эпик": "#9467bd",
+                "Эксплуатация": "#ff7f0e",
                 "Техдолг": "#7f7f7f",
                 "Не определен": "#c7c7c7",
             }
@@ -57,7 +57,7 @@ def render_types_tab(summary_df: pd.DataFrame):
 
     with t_col_g2:
         compare_phases_data = []
-        for group_name, g_df in [("Дефекты (Bugs)", bugs_df), ("Фичи (Tasks/Epics)", features_df)]:
+        for group_name, g_df in [("Дефекты", bugs_df), ("Фичи", features_df)]:
             if not g_df.empty:
                 compare_phases_data.append({
                     "Категория": group_name,

@@ -37,7 +37,7 @@ class TestExtractTaskType:
             "added_values": ["Task", "Bug"],  # последнее = Bug
             "timestamp": ["2024-01-01", "2024-01-02"],
         })
-        assert extract_task_type(df) == "Дефект (Bug)"
+        assert extract_task_type(df) == "Дефект"
 
     def test_task_type(self):
         df = pd.DataFrame({
@@ -45,7 +45,7 @@ class TestExtractTaskType:
             "added_values": ["Task"],
             "timestamp": ["2024-01-01"],
         })
-        assert extract_task_type(df) == "Фича / Задача (Task)"
+        assert extract_task_type(df) == "Фича / Задача"
 
     def test_epic_type(self):
         df = pd.DataFrame({
@@ -53,7 +53,7 @@ class TestExtractTaskType:
             "added_values": ["Epic"],
             "timestamp": ["2024-01-01"],
         })
-        assert extract_task_type(df) == "Эпик (Epic)"
+        assert extract_task_type(df) == "Эпик"
 
     def test_tech_debt_type(self):
         df = pd.DataFrame({
@@ -69,7 +69,7 @@ class TestExtractTaskType:
             "added_values": ["Run"],
             "timestamp": ["2024-01-01"],
         })
-        assert extract_task_type(df) == "Эксплуатация (Run)"
+        assert extract_task_type(df) == "Эксплуатация"
 
     def test_unknown_type(self):
         df = pd.DataFrame({
@@ -94,7 +94,7 @@ class TestExtractTaskType:
             "added_values": ["Bug", "Task", "Epic"],
             "timestamp": ["2024-01-01", "2024-01-02", "2024-01-03"],
         })
-        assert extract_task_type(df) == "Эпик (Epic)"
+        assert extract_task_type(df) == "Эпик"
 
 
 class TestExtractTaskPriorities:
@@ -217,7 +217,7 @@ class TestExtractTaskDeadlines:
         result = extract_task_deadlines(df, pd.Timestamp("2024-01-22 10:00:00"))
         assert result["has_deadline"] is True
         assert result["deadline_shifts"] == 1
-        assert result["sla_status"] == "С опозданием (Overdue)"
+        assert result["sla_status"] == "С опозданием"
         assert result["delay_days"] > 0
 
     def test_on_time_deadline(self):
@@ -228,7 +228,7 @@ class TestExtractTaskDeadlines:
             "timestamp": ["2024-01-15 10:00:00"],
         })
         result = extract_task_deadlines(df, pd.Timestamp("2024-01-19 10:00:00"))
-        assert result["sla_status"] == "В срок (On-Time)"
+        assert result["sla_status"] == "В срок"
 
     def test_no_deadline(self):
         df = pd.DataFrame({"changed_value": ["State"], "added_values": ["In Progress"], "timestamp": ["2024-01-01"]})
@@ -332,7 +332,7 @@ class TestProcessSingleTask:
 
         assert len(reworks) == 1
         assert reworks[0]["Задача"] == "TASK-2"
-        assert reworks[0]["Кто вернул (QA)"] == "QA К."
+        assert reworks[0]["Кто вернул"] == "QA К."
         assert reworks[0]["Разработчик (исправил)"] == "Разработчик Р."
         assert reworks[0]["Время фикса (д.)"] > 0
 

@@ -28,7 +28,7 @@ def render_overview_tab(
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Сквозной Lead Time", f"{mean_lead:.2f} д.", f"Мед: {med_lead:.2f} | P85: {p85_lead:.2f}")
     m2.metric("Суммарно очередей", f"{mean_wait:.2f} д.", f"Мед: {med_wait:.2f} | P85: {p85_wait:.2f}", delta_color="inverse")
-    m3.metric("Чистая работа (An+Dev+QA)", f"{mean_work:.2f} д.", f"Мед: {med_work:.2f} | P85: {p85_work:.2f}")
+    m3.metric("Чистая работа", f"{mean_work:.2f} д.", f"Мед: {med_work:.2f} | P85: {p85_work:.2f}")
     m4.metric("Сквозной Flow Efficiency", f"{mean_flow:.1f}%", f"Мед: {med_flow:.1f}% | P85: {p85_flow:.1f}%")
 
     st.markdown("---")

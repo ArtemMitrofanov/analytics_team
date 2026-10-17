@@ -34,15 +34,15 @@ def extract_task_type(task_df: pd.DataFrame) -> str:
     latest = sub.sort_values('timestamp').iloc[-1]['clean_val'].lower()
     
     if latest in ['bug', 'баг']:
-        return "Дефект (Bug)"
+        return "Дефект"
     if latest in ['task', 'задача', 'change', 'задача осфс']:
-        return "Фича / Задача (Task)"
+        return "Фича / Задача"
     if latest in ['epic', 'эпик']:
-        return "Эпик (Epic)"
+        return "Эпик"
     if latest in ['техдолг']:
         return "Техдолг"
     if latest in ['run']:
-        return "Эксплуатация (Run)"
+        return "Эксплуатация"
     return latest
 
 
@@ -148,7 +148,7 @@ def extract_task_deadlines(task_df: pd.DataFrame, finished_at: Optional[pd.Times
     today = pd.Timestamp.now()
     if finished_at is not None:
         delay = (finished_at.date() - final_deadline.date()).days
-        sla_status = "В срок (On-Time)" if delay <= 0 else "С опозданием (Overdue)"
+        sla_status = "В срок" if delay <= 0 else "С опозданием"
     else:
         delay = (today.date() - final_deadline.date()).days
         sla_status = "В работе (в графике)" if delay <= 0 else "В работе (просрочено)"
@@ -285,7 +285,7 @@ def process_single_task(
             if t_back and t_back > r_c["timestamp"]:
                 fix_mins = get_work_minutes(r_c["timestamp"], t_back, work_start_h, work_end_h, net_ratio)
                 reworks.append({
-                    "Задача": task_id, "Разработчик (исправил)": dev_fixer, "Кто вернул (QA)": qa_rejector,
+                    "Задача": task_id, "Разработчик (исправил)": dev_fixer, "Кто вернул": qa_rejector,
                     "Дата возврата": r_c["timestamp"].strftime("%Y-%m-%d %H:%M:%S"),
                     "Возвращено в QA": t_back.strftime("%Y-%m-%d %H:%M:%S"),
                     "Время фикса (д.)": round((fix_mins / 60.0) / net_day_hours, 2),

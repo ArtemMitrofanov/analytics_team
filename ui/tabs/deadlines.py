@@ -6,7 +6,7 @@ import streamlit as st
 
 def render_deadlines_tab(summary_df: pd.DataFrame):
     st.subheader("⏰ Контроль выполнения обязательств и дедлайнов (SLA)")
-    st.caption("Анализ соблюдения сроков заказчика, частоты переносов дедлайнов (Slippage) и просрочек")
+    st.caption("Анализ соблюдения сроков заказчика, частоты переносов дедлайнов и просрочек")
 
     if "has_deadline" not in summary_df.columns:
         st.info("Поле дедлайнов не найдено в структуре данных.")
@@ -16,8 +16,8 @@ def render_deadlines_tab(summary_df: pd.DataFrame):
 
     if not deadlines_df.empty:
         total_with_dl = len(deadlines_df)
-        on_time_tasks = deadlines_df[deadlines_df["sla_status"] == "В срок (On-Time)"]
-        overdue_tasks = deadlines_df[deadlines_df["sla_status"].isin(["С опозданием (Overdue)", "В работе (просрочено)"])]
+        on_time_tasks = deadlines_df[deadlines_df["sla_status"] == "В срок"]
+        overdue_tasks = deadlines_df[deadlines_df["sla_status"].isin(["С опозданием", "В работе (просрочено)"])]
         shifted_tasks = deadlines_df[deadlines_df.get("deadline_shifts", 0) > 0]
 
         on_time_pct = (len(on_time_tasks) / total_with_dl * 100) if total_with_dl > 0 else 0.0
@@ -28,8 +28,8 @@ def render_deadlines_tab(summary_df: pd.DataFrame):
         max_slippage = shifted_tasks["deadline_slippage_days"].max() if not shifted_tasks.empty else 0.0
 
         dl1, dl2, dl3, dl4 = st.columns(4)
-        dl1.metric("Сдано в срок (On-Time Rate)", f"{on_time_pct:.1f}%", f"{len(on_time_tasks)} из {total_with_dl} задач")
-        dl2.metric("Просрочено (Overdue)", f"{overdue_pct:.1f}%", f"{len(overdue_tasks)} задач", delta_color="inverse")
+        dl1.metric("Сдано в срок", f"{on_time_pct:.1f}%", f"{len(on_time_tasks)} из {total_with_dl} задач")
+        dl2.metric("Просрочено", f"{overdue_pct:.1f}%", f"{len(overdue_tasks)} задач", delta_color="inverse")
         dl3.metric("Задач с переносом срока", f"{shifted_pct:.1f}%", f"{len(shifted_tasks)} тикетов", delta_color="inverse")
         dl4.metric("Средний сдвиг дедлайна", f"{avg_slippage:.1f} д.", f"Макс: {max_slippage} д.")
 
@@ -44,9 +44,9 @@ def render_deadlines_tab(summary_df: pd.DataFrame):
                 hole=0.45,
                 color="sla_status",
                 color_discrete_map={
-                    "В срок (On-Time)": "#2ca02c",
+                    "В срок": "#2ca02c",
                     "В работе (в графике)": "#1f77b4",
-                    "С опозданием (Overdue)": "#d62728",
+                    "С опозданием": "#d62728",
                     "В работе (просрочено)": "#ff7f0e",
                 }
             )
