@@ -160,6 +160,35 @@ def extract_task_deadlines(task_df: pd.DataFrame, finished_at: Optional[pd.Times
     }
 
 
+def extract_deadline_shifts_detail(task_df: pd.DataFrame) -> List[Dict[str, Any]]:
+    """Все изменения поля «Дедлайн заказчика» по задаче, по возрастанию timestamp.
+
+    Возвращает список словарей:
+        {"ts": Timestamp, "deadline_before": Timestamp | None, "deadline_after": Timestamp}
+    Первое событие задаёт начальный дедлайн (deadline_before=None) и сдвигом не считается.
+    Существующий extract_task_deadlines не изменяется — эта функция нужна только графу.
+    """
+    deadline_sub = task_df[task_df["changed_value"] == "Дедлайн заказчика"].copy()
+    if deadline_sub.empty:
+        return []
+    deadline_sub["clean"] = deadline_sub["added_values"].apply(clean_val)
+    deadline_sub = deadline_sub[deadline_sub["clean"] != ""]
+    if deadline_sub.empty:
+        return []
+
+    detail: List[Dict[str, Any]] = []
+    prev: Optional[pd.Timestamp] = None
+    for _, r in deadline_sub.sort_values("timestamp").iterrows():
+        try:
+            dt = pd.to_datetime(int(r["clean"]), unit="ms")
+        except Exception:
+            continue
+        ts = pd.to_datetime(r["timestamp"])
+        detail.append({"ts": ts, "deadline_before": prev, "deadline_after": dt})
+        prev = dt
+    return detail
+
+
 def process_single_task(
     task_id: str,
     task_df: pd.DataFrame,

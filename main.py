@@ -21,6 +21,7 @@ from ui.tabs.types import render_types_tab
 from ui.tabs.priorities import render_priorities_tab
 from ui.tabs.role_view import render_role_tab
 from ui.tabs.task_detail import render_task_detail_tab
+from ui.tabs.graph_tab import render_graph_tab
 from ui.theme import inject_theme
 from db import (
     get_all_events, get_summary_stats, clear_database, get_db_fingerprint
@@ -254,7 +255,7 @@ def run_streamlit_app():
         # Динамически создаём навигацию на основе роли
         tabs_to_render = [tab for tab in [
             "overview", "periods", "estimates", "deadlines", "types", "priorities",
-            "qa", "dev", "analytics", "detail"
+            "qa", "dev", "analytics", "detail", "graph"
         ] if tab in available_tabs]
 
         nav_labels = [tab_labels[t] for t in tabs_to_render]
@@ -362,6 +363,9 @@ def run_streamlit_app():
             elif selected_key == "detail":
                 # Для детализации используем global_summary_df и все задачи (не отфильтрованные по роли)
                 render_task_detail_tab(global_summary_df, all_active_tids)
+
+            elif selected_key == "graph":
+                render_graph_tab()
 
 
 if __name__ == "__main__":
