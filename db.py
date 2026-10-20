@@ -1,44 +1,154 @@
-"""db.py — DuckDB хранение событий задач с дедупликацией по row_hash."""
+"""db.py — PostgreSQL хранение событий задач с дедупликацией по row_hash."""
 import hashlib
+import io
 import os
+import threading
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Optional
 
-import duckdb
 import pandas as pd
+import psycopg
+from psycopg_pool import ConnectionPool, PoolTimeout
 
-DB_PATH = Path(os.getenv("DUCKDB_PATH", Path(__file__).resolve().parent / "data" / "analytics.duckdb"))
+SCHEMA_PATH = Path(__file__).resolve().parent / "schema.sql"
+EVENT_COLUMNS = [
+    "task_id",
+    "timestamp",
+    "changed_value",
+    "added_values",
+    "removed_values",
+    "author_full_name",
+    "activity_type",
+    "source_file",
+    "file_hash",
+    "row_hash",
+]
+_TEXT_COLUMNS = [
+    "task_id",
+    "changed_value",
+    "added_values",
+    "removed_values",
+    "author_full_name",
+    "activity_type",
+    "source_file",
+    "file_hash",
+    "row_hash",
+]
+
+_pool: ConnectionPool | None = None
+_pool_dsn: str | None = None
+_pool_lock = threading.Lock()
+_schema_lock = threading.Lock()
+_schema_ready: set[int] = set()
 
 
-def get_conn() -> duckdb.DuckDBPyConnection:
-    """Получить соединение с DuckDB (создаёт файл при первом вызове)."""
-    conn = duckdb.connect(str(DB_PATH))
-    _init_schema(conn)
-    return conn
-
-
-def _init_schema(conn: duckdb.DuckDBPyConnection) -> None:
-    """Создать схему таблиц при первом запуске."""
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS task_events (
-            task_id VARCHAR NOT NULL,
-            timestamp TIMESTAMP NOT NULL,
-            changed_value VARCHAR NOT NULL,
-            added_values VARCHAR,
-            removed_values VARCHAR,
-            author_full_name VARCHAR,
-            activity_type VARCHAR,
-            source_file VARCHAR NOT NULL,
-            file_hash VARCHAR NOT NULL,
-            row_hash VARCHAR NOT NULL,
-            loaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (row_hash)
+def get_dsn() -> str:
+    """Вернуть строку подключения PostgreSQL из окружения."""
+    dsn = os.getenv("ANALYTICS_DATABASE_URL") or os.getenv("DATABASE_URL")
+    if not dsn:
+        raise RuntimeError(
+            "Не задан ANALYTICS_DATABASE_URL. "
+            "Пример: postgresql://analytics:password@127.0.0.1:5432/analytics"
         )
-    """)
-    # Индексы для быстрых аналитических запросов
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_task_events_task_ts ON task_events(task_id, timestamp)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_task_events_file_hash ON task_events(file_hash)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_task_events_changed ON task_events(changed_value)")
+    return dsn
+
+
+def get_pool() -> ConnectionPool:
+    """Лениво создать общий пул соединений с PostgreSQL."""
+    global _pool, _pool_dsn
+    dsn = get_dsn()
+    with _pool_lock:
+        if _pool is not None and _pool_dsn == dsn:
+            return _pool
+        if _pool is not None:
+            _pool.close()
+            _schema_ready.clear()
+        pool = ConnectionPool(
+            dsn,
+            min_size=1,
+            max_size=10,
+            timeout=10,
+            max_idle=300,
+            check=ConnectionPool.check_connection,
+            open=False,
+            kwargs={"application_name": "team_process_analytics"},
+        )
+        try:
+            pool.open(wait=True, timeout=10)
+        except PoolTimeout as exc:
+            pool.close()
+            try:
+                psycopg.connect(dsn, connect_timeout=5).close()
+            except Exception as connect_error:
+                raise RuntimeError(
+                    f"Не удалось подключиться к PostgreSQL: {connect_error}"
+                ) from connect_error
+            raise RuntimeError("Пул PostgreSQL не инициализировался") from exc
+        except Exception:
+            pool.close()
+            raise
+        _pool = pool
+        _pool_dsn = dsn
+        return pool
+
+
+def close_pool() -> None:
+    """Закрыть пул (используется при завершении тестов и приложений)."""
+    global _pool, _pool_dsn
+    with _pool_lock:
+        if _pool is not None:
+            _pool.close()
+        _pool = None
+        _pool_dsn = None
+        _schema_ready.clear()
+
+
+def init_schema(pool: ConnectionPool | None = None) -> None:
+    """Создать таблицы и индексы при первом подключении."""
+    target = pool or get_pool()
+    key = id(target)
+    if key in _schema_ready:
+        return
+    with _schema_lock:
+        if key in _schema_ready:
+            return
+        statements = [
+            statement.strip()
+            for statement in SCHEMA_PATH.read_text(encoding="utf-8").split(";")
+            if statement.strip()
+        ]
+        with target.connection() as conn:
+            conn.execute(
+                "SELECT pg_advisory_xact_lock("
+                "hashtext('team_process_analytics_schema')::bigint)"
+            )
+            for statement in statements:
+                conn.execute(statement)
+        _schema_ready.add(key)
+
+
+@contextmanager
+def _connection():
+    """Соединение из пула; транзакция коммитится при успешном выходе."""
+    pool = get_pool()
+    init_schema(pool)
+    with pool.connection() as conn:
+        yield conn
+
+
+def _normalize_event_dtypes(df: pd.DataFrame) -> pd.DataFrame:
+    """Сохранить datetime-типы даже для пустого результата запроса."""
+    if "timestamp" in df.columns:
+        df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
+    if "loaded_at" in df.columns:
+        df["loaded_at"] = pd.to_datetime(df["loaded_at"], errors="coerce", utc=True)
+    return df
+
+
+def _read_df(conn, sql: str, params=None) -> pd.DataFrame:
+    cur = conn.execute(sql, params) if params is not None else conn.execute(sql)
+    columns = [column.name for column in cur.description] if cur.description else []
+    return _normalize_event_dtypes(pd.DataFrame(cur.fetchall(), columns=columns))
 
 
 def make_row_hash(row: pd.Series) -> str:
@@ -65,25 +175,36 @@ def make_file_hash(content: bytes) -> str:
 
 def is_file_loaded(file_hash: str) -> bool:
     """Проверить, загружен ли файл с таким хэшем."""
-    conn = get_conn()
-    result = conn.execute(
-        "SELECT 1 FROM task_events WHERE file_hash = ? LIMIT 1", (file_hash,)
-    ).fetchone()
-    return result is not None
+    with _connection() as conn:
+        row = conn.execute(
+            "SELECT EXISTS(SELECT 1 FROM task_events WHERE file_hash = %s)",
+            (file_hash,),
+        ).fetchone()
+    return bool(row and row[0])
+
+
+def _prepare_for_copy(df: pd.DataFrame) -> pd.DataFrame:
+    """Привести DataFrame к типам, которые принимает COPY в PostgreSQL."""
+    if "timestamp" not in df.columns:
+        return df.head(0)
+    if getattr(df["timestamp"].dt, "tz", None) is not None:
+        df["timestamp"] = df["timestamp"].dt.tz_localize(None)
+    df["timestamp"] = [value.to_pydatetime() for value in df["timestamp"]]
+    for column in _TEXT_COLUMNS:
+        df[column] = df[column].map(lambda value: None if pd.isna(value) else str(value))
+    return df
 
 
 def load_dataframe_to_db(df: pd.DataFrame, source_file: str, file_hash: str) -> int:
     """
-    Загрузить DataFrame в DuckDB с дедупликацией по row_hash.
+    Загрузить DataFrame в PostgreSQL с дедупликацией по row_hash.
     Возвращает количество реально добавленных строк.
     """
     if df.empty:
         return 0
 
-    # Копия чтобы не менять оригинал
     df = df.copy()
 
-    # Нормализация названий колонок
     if "task_identifier" in df.columns:
         df["task_id"] = df["task_identifier"]
     elif "issue_id" in df.columns:
@@ -91,93 +212,105 @@ def load_dataframe_to_db(df: pd.DataFrame, source_file: str, file_hash: str) -> 
     elif "iissue_id" in df.columns:
         df["task_id"] = df["iissue_id"]
 
-    # row_hash для каждой строки
+    # row_hash считается по исходным значениям — так же, как в прежней DuckDB-версии.
     df["row_hash"] = df.apply(make_row_hash, axis=1)
-
-    # Метаданные файла
     df["source_file"] = source_file
     df["file_hash"] = file_hash
 
-    # Приведение timestamp к TIMESTAMP
     if "timestamp" in df.columns:
         df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
 
-    # Добавляем activity_type если нет
-    if "activity_type" not in df.columns:
-        df["activity_type"] = ""
+    for column in ("added_values", "removed_values", "author_full_name", "activity_type"):
+        if column not in df.columns:
+            df[column] = ""
 
-    # Выбор нужных колонок
-    cols = [
-        "task_id", "timestamp", "changed_value", "added_values",
-        "removed_values", "author_full_name", "activity_type",
-        "source_file", "file_hash", "row_hash"
-    ]
-    df = df[cols].dropna(subset=["task_id", "timestamp", "changed_value"])
-
+    df = df[EVENT_COLUMNS].dropna(subset=["task_id", "timestamp", "changed_value"])
     if df.empty:
         return 0
 
-    conn = get_conn()
+    df = _prepare_for_copy(df)
+    column_sql = ", ".join(
+        f'"{column}"' if column == "timestamp" else column for column in EVENT_COLUMNS
+    )
 
-    # INSERT OR IGNORE — пропускает дубликаты по PRIMARY KEY (row_hash)
-    result = conn.execute("""
-        INSERT OR IGNORE INTO task_events 
-        (task_id, timestamp, changed_value, added_values, removed_values,
-         author_full_name, activity_type, source_file, file_hash, row_hash)
-        SELECT task_id, timestamp, changed_value, added_values, removed_values,
-               author_full_name, activity_type, source_file, file_hash, row_hash
-        FROM df
-    """)
-    # DuckDB возвращает количество вставленных строк через fetchall()[0][0]
-    count_result = result.fetchall()
-    if count_result and len(count_result) > 0 and len(count_result[0]) > 0:
-        return count_result[0][0]
-    return 0
+    with _connection() as conn:
+        conn.execute(
+            "CREATE TEMP TABLE _task_events_staging ON COMMIT DROP "
+            "AS SELECT * FROM task_events WITH NO DATA"
+        )
+        buffer = io.StringIO()
+        df[EVENT_COLUMNS].to_csv(
+            buffer, index=False, header=False, lineterminator="\n", na_rep="\\N"
+        )
+        buffer.seek(0)
+        with conn.cursor() as cur:
+            with cur.copy(
+                f"COPY _task_events_staging ({column_sql}) "
+                "FROM STDIN WITH (FORMAT csv, NULL '\\N')"
+            ) as copy:
+                while chunk := buffer.read(1024 * 1024):
+                    copy.write(chunk)
+            cur.execute(
+                f"""
+                INSERT INTO task_events ({column_sql})
+                SELECT {column_sql} FROM _task_events_staging
+                ON CONFLICT (row_hash) DO NOTHING
+                RETURNING 1
+                """
+            )
+            return len(cur.fetchall())
 
 
 def get_db_fingerprint() -> str:
     """Короткий отпечаток содержимого БД для ключа кэша pipeline."""
-    conn = get_conn()
-    row = conn.execute("""
-        SELECT COALESCE(COUNT(*), 0) || '|' ||
-               COALESCE(CAST(MAX(loaded_at) AS VARCHAR), '') || '|' ||
-               COALESCE(CAST(MAX(timestamp) AS VARCHAR), '')
-        FROM task_events
-    """).fetchone()
-    return str(row[0]) if row else "empty"
+    with _connection() as conn:
+        row = conn.execute(
+            'SELECT COUNT(*), MAX(loaded_at), MAX("timestamp") FROM task_events'
+        ).fetchone()
+    if not row:
+        return "empty"
+    return f"{row[0]}|{row[1] or ''}|{row[2] or ''}"
 
 
 def get_all_events() -> pd.DataFrame:
     """Получить все события для аналитики."""
-    conn = get_conn()
-    return conn.execute("SELECT * FROM task_events ORDER BY task_id, timestamp").df()
+    with _connection() as conn:
+        return _read_df(
+            conn,
+            'SELECT * FROM task_events ORDER BY task_id, "timestamp"',
+        )
 
 
 def get_events_for_tasks(task_ids: list[str]) -> pd.DataFrame:
     """Получить события для списка задач."""
     if not task_ids:
-        return pd.DataFrame()
-    conn = get_conn()
-    placeholders = ",".join(["?"] * len(task_ids))
-    return conn.execute(
-        f"SELECT * FROM task_events WHERE task_id IN ({placeholders}) ORDER BY task_id, timestamp",
-        task_ids
-    ).df()
+        return _normalize_event_dtypes(
+            pd.DataFrame(columns=EVENT_COLUMNS + ["loaded_at"])
+        )
+    with _connection() as conn:
+        return _read_df(
+            conn,
+            'SELECT * FROM task_events '
+            'WHERE task_id = ANY(%s) ORDER BY task_id, "timestamp"',
+            ([str(task_id) for task_id in task_ids],),
+        )
 
 
 def get_summary_stats() -> dict:
     """Базовая статистика по БД."""
-    conn = get_conn()
-    stats = conn.execute("""
-        SELECT 
-            COUNT(*) as total_rows,
-            COUNT(DISTINCT task_id) as unique_tasks,
-            COUNT(DISTINCT source_file) as loaded_files,
-            MIN(timestamp) as earliest_event,
-            MAX(timestamp) as latest_event,
-            MAX(loaded_at) as last_load
-        FROM task_events
-    """).fetchone()
+    with _connection() as conn:
+        stats = conn.execute(
+            """
+            SELECT
+                COUNT(*) AS total_rows,
+                COUNT(DISTINCT task_id) AS unique_tasks,
+                COUNT(DISTINCT source_file) AS loaded_files,
+                MIN("timestamp") AS earliest_event,
+                MAX("timestamp") AS latest_event,
+                MAX(loaded_at) AS last_load
+            FROM task_events
+            """
+        ).fetchone()
     return {
         "total_rows": stats[0],
         "unique_tasks": stats[1],
@@ -190,6 +323,5 @@ def get_summary_stats() -> dict:
 
 def clear_database() -> None:
     """Полная очистка (для тестов/перезагрузки)."""
-    conn = get_conn()
-    conn.execute("DELETE FROM task_events")
-    conn.execute("VACUUM")
+    with _connection() as conn:
+        conn.execute("TRUNCATE TABLE task_events")

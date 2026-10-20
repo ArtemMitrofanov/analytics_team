@@ -5,7 +5,8 @@ __pycache__
 venv
 .env
 *.duckdb
-data/
+*.sqlite3*
+pgdata/
 .git
 *.log
 .DS_Store

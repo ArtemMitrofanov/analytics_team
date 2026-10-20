@@ -4,6 +4,7 @@ from streamlit.testing.v1 import AppTest
 import auth
 from access_control import USERS
 from auth_sessions import SessionStore
+from db import get_pool, init_schema
 
 SOURCE = '''
 import streamlit as st
@@ -15,9 +16,13 @@ if render_login_page():
 
 
 @pytest.fixture
-def browser(tmp_path, monkeypatch):
+def browser(database_url, monkeypatch):
     cookies = {}
-    store = SessionStore(tmp_path / "sessions.sqlite3")
+    pool = get_pool()
+    init_schema(pool)
+    with pool.connection() as conn:
+        conn.execute("TRUNCATE TABLE auth_sessions")
+    store = SessionStore(pool)
     monkeypatch.setattr(auth, "_store", lambda: store)
     def component(**args):
         result = {"request_id": args["request_id"]}
@@ -31,7 +36,9 @@ def browser(tmp_path, monkeypatch):
             result["ok"] = True
         return result
     monkeypatch.setattr(auth, "cookie_component", component)
-    return cookies, store
+    yield cookies, store
+    with pool.connection() as conn:
+        conn.execute("TRUNCATE TABLE auth_sessions")
 
 
 def test_login_refresh_logout_and_replay(browser):

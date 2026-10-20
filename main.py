@@ -68,7 +68,7 @@ def run_streamlit_app():
     user_role = st.session_state.user_role
     is_admin = user_role == "admin"
 
-    # Читаем все события из DuckDB для аналитики
+    # Читаем все события из PostgreSQL для аналитики
     full_raw_df = get_all_events()
 
     periods_m = sorted(full_raw_df["timestamp"].dt.to_period("M").unique())
@@ -131,7 +131,7 @@ def run_streamlit_app():
         net_ratio = net_day_hours / day_window
 
         st.markdown("---")
-        st.header("🗄️ База данных (DuckDB)")
+        st.header("🗄️ База данных (PostgreSQL)")
         stats = get_summary_stats()
         st.metric("Загружено строк", f"{stats['total_rows']:,}")
         st.metric("Уникальных задач", f"{stats['unique_tasks']:,}")
@@ -177,7 +177,7 @@ def run_streamlit_app():
                 
                 df_temp["task_identifier"] = df_temp.get("issue_id", df_temp.get("iissue_id", f.name.replace(".csv", "")))
                 
-                # Загрузка в DuckDB с дедупликацией
+                # Загрузка в PostgreSQL с дедупликацией
                 from db import load_dataframe_to_db
                 new_rows = load_dataframe_to_db(df_temp, f.name, file_hash)
                 total_new_rows += new_rows

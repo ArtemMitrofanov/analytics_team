@@ -1,25 +1,31 @@
 import hashlib
-import sqlite3
 
 import pytest
 
 from auth_sessions import SESSION_TTL, SessionStore
+from db import get_pool, init_schema
 
 
 @pytest.fixture
-def sessions(tmp_path):
+def sessions(database_url):
     now = [1000]
     users = {"admin": {"password_hash": hashlib.sha256(b"password").hexdigest(), "role": "admin"}}
-    store = SessionStore(tmp_path / "sessions.sqlite3", clock=lambda: now[0])
-    return store, users, now
+    pool = get_pool()
+    init_schema(pool)
+    with pool.connection() as conn:
+        conn.execute("TRUNCATE TABLE auth_sessions")
+    store = SessionStore(pool, clock=lambda: now[0])
+    yield store, users, now
+    with pool.connection() as conn:
+        conn.execute("TRUNCATE TABLE auth_sessions")
 
 
 def test_session_survives_new_store_instance(sessions):
     store, users, now = sessions
     token = store.create("admin", users["admin"]["password_hash"])
-    reopened = SessionStore(store.path, clock=lambda: now[0])
+    reopened = SessionStore(store.pool, clock=lambda: now[0])
     assert reopened.resolve(token, users) == "admin"
-    with sqlite3.connect(store.path) as conn:
+    with store.pool.connection() as conn:
         assert conn.execute("SELECT token_hash FROM auth_sessions").fetchone()[0] != token
 
 

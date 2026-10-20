@@ -10,13 +10,43 @@ if [ -e "$APP_DIR" ]; then
 fi
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y --no-install-recommends git python3-venv python3-pip nginx curl
+apt-get install -y --no-install-recommends git python3-venv python3-pip nginx curl postgresql
 id analytics-team >/dev/null 2>&1 || useradd --system --home /var/lib/analytics-team --shell /usr/sbin/nologin analytics-team
 install -d -o analytics-team -g analytics-team -m 0750 /var/lib/analytics-team
 install -d -o root -g analytics-team -m 0750 /etc/analytics-team
+
+DB_NAME=analytics
+DB_USER=analytics_app
+DB_PASSWORD=$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')
+systemctl enable --now postgresql
+for attempt in $(seq 1 30); do
+    if runuser -u postgres -- pg_isready --quiet; then
+        break
+    fi
+    sleep 1
+done
+if runuser -u postgres -- psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='$DB_USER'" | grep -q 1; then
+    ROLE_ACTION=ALTER
+else
+    ROLE_ACTION=CREATE
+fi
+runuser -u postgres -- psql -v ON_ERROR_STOP=1 <<SQL
+$ROLE_ACTION ROLE $DB_USER LOGIN PASSWORD '$DB_PASSWORD';
+SQL
+if ! runuser -u postgres -- psql -tAc "SELECT 1 FROM pg_database WHERE datname='$DB_NAME'" | grep -q 1; then
+    runuser -u postgres -- createdb -O "$DB_USER" "$DB_NAME"
+fi
+install -o root -g analytics-team -m 0640 /dev/null /etc/analytics-team/database.env
+printf 'ANALYTICS_DATABASE_URL=postgresql://%s:%s@127.0.0.1:5432/%s\n' \
+    "$DB_USER" "$DB_PASSWORD" "$DB_NAME" > /etc/analytics-team/database.env
+
 git clone https://github.com/ArtemMitrofanov/analytics_team.git "$APP_DIR"
 cd "$APP_DIR"
 git checkout --detach "$COMMIT"
+set -a
+. /etc/analytics-team/database.env
+set +a
+psql "$ANALYTICS_DATABASE_URL" -v ON_ERROR_STOP=1 -f "$APP_DIR/schema.sql"
 python3 -m venv .venv
 .venv/bin/python - <<'PY'
 import pathlib, tomllib
@@ -54,7 +84,8 @@ chmod -R g+rX,o-rwx "$APP_DIR"
 cat > /etc/systemd/system/analytics-team.service <<'UNIT'
 [Unit]
 Description=Team Process Analytics (Streamlit)
-After=network.target
+After=network.target postgresql.service
+Wants=postgresql.service
 
 [Service]
 Type=simple
@@ -63,9 +94,8 @@ Group=analytics-team
 WorkingDirectory=/opt/analytics-team
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONDONTWRITEBYTECODE=1
-Environment=DUCKDB_PATH=/var/lib/analytics-team/analytics.duckdb
+EnvironmentFile=/etc/analytics-team/database.env
 Environment=ANALYTICS_USERS_FILE=/etc/analytics-team/users.json
-Environment=ANALYTICS_SESSION_DB=/var/lib/analytics-team/auth_sessions.sqlite3
 Environment=HOME=/var/lib/analytics-team
 Environment=OMP_NUM_THREADS=1
 Environment=OPENBLAS_NUM_THREADS=1

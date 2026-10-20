@@ -3,6 +3,8 @@ __pycache__/
 *.py[cod]
 *$py.class
 .pytest_cache/
+.ruff_cache/
+.mypy_cache/
 .coverage
 htmlcov/
 
@@ -39,8 +41,10 @@ dist/
 build/
 *.egg-info/
 
-# база данных
+# локальные данные и резервные копии
 analytics.duckdb
 *.duckdb
 *.duckdb.wal
 *.sqlite3*
+pgdata/
+*.dump

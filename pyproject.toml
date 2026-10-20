@@ -9,7 +9,8 @@ dependencies = [
     "numpy==1.26.4",
     "streamlit==1.37.0",
     "plotly==5.22.0",
-    "duckdb==1.5.5",
+    "psycopg[binary]==3.3.6",
+    "psycopg-pool==3.3.3",
     "pyarrow==17.0.0",
 ]
 

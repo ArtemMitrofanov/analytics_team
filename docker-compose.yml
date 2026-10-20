@@ -1,19 +1,32 @@
-version: "3.8"
-
 services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-analytics}
+      POSTGRES_USER: ${POSTGRES_USER:-analytics}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
   app:
     build: .
     ports:
       - "8501:8501"
-    volumes:
-      # Монтируем папку data хоста в контейнер для персистентности БД
-      - ./data:/app/data
     environment:
-      - PYTHONUNBUFFERED=1
-      - DUCKDB_PATH=/app/data/analytics.duckdb
+      PYTHONUNBUFFERED: "1"
+      ANALYTICS_DATABASE_URL: postgresql://${POSTGRES_USER:-analytics}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/${POSTGRES_DB:-analytics}
+    depends_on:
+      db:
+        condition: service_healthy
     restart: unless-stopped
 
-# Named volume (альтернатива ./data:/app/data) — раскомментируйте если нужно:
-# volumes:
-#   duckdb_data:
-#     driver: local
+volumes:
+  pgdata:

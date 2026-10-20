@@ -65,7 +65,7 @@ def process_all_tasks_cached(
     net_ratio: float,
     net_day_hours: float
 ):
-    """Обрабатывает все задачи из DuckDB. Кэш ключируется по отпечатку БД, а не по DataFrame."""
+    """Обрабатывает все задачи из PostgreSQL. Кэш ключируется по отпечатку БД, а не по DataFrame."""
     from db import get_all_events
 
     raw_df = get_all_events()

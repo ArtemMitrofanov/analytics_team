@@ -1,20 +1,22 @@
-"""tests/test_db.py — тесты DuckDB: загрузка, дедупликация по row_hash и file_hash."""
-import pytest
+"""tests/test_db.py — тесты PostgreSQL: загрузка, дедупликация по row_hash и file_hash."""
 import pandas as pd
+import pytest
 
 from db import (
+    clear_database,
+    get_all_events,
+    get_db_fingerprint,
+    get_events_for_tasks,
+    get_summary_stats,
+    is_file_loaded,
     load_dataframe_to_db,
     make_file_hash,
-    is_file_loaded,
-    get_all_events,
-    get_summary_stats,
-    clear_database,
     make_row_hash,
 )
 
 
 @pytest.fixture(autouse=True)
-def _clean_db():
+def _clean_db(database_url):
     """Очистка БД перед каждым тестом."""
     clear_database()
     yield
@@ -85,7 +87,7 @@ class TestMakeFileHash:
 
 
 class TestLoadDataframeToDB:
-    """Тесты загрузки DataFrame в DuckDB с дедупликацией."""
+    """Тесты загрузки DataFrame в PostgreSQL с дедупликацией."""
 
     def _make_df(self, task_ids=None):
         if task_ids is None:
@@ -120,10 +122,10 @@ class TestLoadDataframeToDB:
         """Повторная загрузка того же файла (тот же file_hash) — 0 новых строк."""
         df = self._make_df()
         file_hash = "abc123"
-        
+
         load_dataframe_to_db(df, "test.csv", file_hash)
         inserted = load_dataframe_to_db(df, "test.csv", file_hash)
-        
+
         assert inserted == 0
         stats = get_summary_stats()
         assert stats["total_rows"] == 3  # не изменилось
@@ -132,10 +134,10 @@ class TestLoadDataframeToDB:
         """Те же строки (row_hash), но другой file_hash — 0 новых строк (row_hash дедуп).
         loaded_files остаётся 1, так как строки с hash2 не вставились (row_hash конфликт)."""
         df = self._make_df()
-        
+
         load_dataframe_to_db(df, "test.csv", "hash1")
         inserted = load_dataframe_to_db(df, "test.csv", "hash2")  # другой file_hash
-        
+
         assert inserted == 0
         stats = get_summary_stats()
         assert stats["total_rows"] == 3
@@ -145,14 +147,98 @@ class TestLoadDataframeToDB:
         """Новые строки (другой row_hash) вставляются даже при том же file_hash."""
         df1 = self._make_df(["TASK-1"])
         df2 = self._make_df(["TASK-3", "TASK-4"])
-        
+
         load_dataframe_to_db(df1, "test.csv", "hash1")
         inserted = load_dataframe_to_db(df2, "test.csv", "hash1")  # тот же file_hash
-        
+
         assert inserted == 2
         stats = get_summary_stats()
         assert stats["total_rows"] == 3  # 1 + 2
         assert stats["unique_tasks"] == 3  # TASK-1, TASK-3, TASK-4
+
+
+class TestPostgresBehaviour:
+    """Особенности загрузки через COPY и ON CONFLICT."""
+
+    def test_duplicate_rows_in_single_batch_inserted_once(self):
+        """Дубликаты внутри одного файла не создают повторных строк."""
+        df = pd.DataFrame({
+            "task_identifier": ["TASK-1", "TASK-1"],
+            "timestamp": ["2024-01-15 10:00", "2024-01-15 10:00"],
+            "changed_value": ["State", "State"],
+            "added_values": ["In Progress", "In Progress"],
+            "removed_values": ["Open", "Open"],
+            "author_full_name": ["User1", "User1"],
+        })
+
+        inserted = load_dataframe_to_db(df, "test.csv", "hash1")
+
+        assert inserted == 1
+        assert get_summary_stats()["total_rows"] == 1
+
+    def test_null_optional_fields_are_stored(self):
+        """Пустые необязательные поля не ломают COPY."""
+        df = pd.DataFrame({
+            "task_identifier": ["TASK-1"],
+            "timestamp": ["2024-01-15 10:00"],
+            "changed_value": ["State"],
+            "added_values": [None],
+            "removed_values": [None],
+            "author_full_name": [None],
+        })
+
+        assert load_dataframe_to_db(df, "test.csv", "hash1") == 1
+        events = get_all_events()
+        assert len(events) == 1
+        assert pd.isna(events.iloc[0]["added_values"])
+        assert pd.isna(events.iloc[0]["author_full_name"])
+
+    def test_empty_strings_stay_empty_strings(self):
+        """Пустая строка не превращается в NULL при COPY."""
+        df = pd.DataFrame({
+            "task_identifier": ["TASK-1"],
+            "timestamp": ["2024-01-15 10:00"],
+            "changed_value": [""],
+            "added_values": [""],
+            "removed_values": [""],
+            "author_full_name": [""],
+        })
+
+        assert load_dataframe_to_db(df, "test.csv", "hash1") == 1
+        events = get_all_events()
+        assert events.iloc[0]["changed_value"] == ""
+        assert events.iloc[0]["added_values"] == ""
+
+    def test_get_events_for_tasks_filters_rows(self):
+        """Выборка по списку задач возвращает только нужные строки."""
+        df = pd.DataFrame({
+            "task_identifier": ["TASK-1", "TASK-2"],
+            "timestamp": ["2024-01-15 10:00", "2024-01-16 10:00"],
+            "changed_value": ["State", "State"],
+            "added_values": ["In Progress", "Done"],
+            "removed_values": ["Open", "In Progress"],
+            "author_full_name": ["User1", "User2"],
+        })
+        load_dataframe_to_db(df, "test.csv", "hash1")
+
+        events = get_events_for_tasks(["TASK-2"])
+
+        assert list(events["task_id"]) == ["TASK-2"]
+
+    def test_fingerprint_changes_after_load(self):
+        """Отпечаток БД меняется при добавлении строк."""
+        empty_fingerprint = get_db_fingerprint()
+        df = pd.DataFrame({
+            "task_identifier": ["TASK-1"],
+            "timestamp": ["2024-01-15 10:00"],
+            "changed_value": ["State"],
+            "added_values": ["In Progress"],
+            "removed_values": ["Open"],
+            "author_full_name": ["User1"],
+        })
+        load_dataframe_to_db(df, "test.csv", "hash1")
+
+        assert get_db_fingerprint() != empty_fingerprint
 
 
 class TestIsFileLoaded:
@@ -188,7 +274,7 @@ class TestGetAllEvents:
             "author_full_name": ["User1", "User2"],
         })
         load_dataframe_to_db(df, "test.csv", "hash1")
-        
+
         events = get_all_events()
         assert len(events) == 2
         assert list(events["task_id"]) == ["TASK-1", "TASK-2"]
@@ -196,6 +282,7 @@ class TestGetAllEvents:
     def test_empty_db_returns_empty_df(self):
         events = get_all_events()
         assert events.empty
+        assert pd.api.types.is_datetime64_any_dtype(events["timestamp"])
 
 
 class TestGetSummaryStats:
@@ -217,7 +304,7 @@ class TestGetSummaryStats:
             "author_full_name": ["User1", "User1", "User2"],
         })
         load_dataframe_to_db(df, "test.csv", "hash1")
-        
+
         stats = get_summary_stats()
         assert stats["total_rows"] == 3
         assert stats["unique_tasks"] == 2
@@ -237,9 +324,9 @@ class TestClearDatabase:
             "author_full_name": ["User1"],
         })
         load_dataframe_to_db(df, "test.csv", "hash1")
-        
+
         clear_database()
-        
+
         stats = get_summary_stats()
         assert stats["total_rows"] == 0
         assert stats["unique_tasks"] == 0

@@ -1,15 +1,20 @@
 """auth.py — Аутентификация и управление сессией."""
-import streamlit as st
-import os
-from pathlib import Path
 import uuid
+from pathlib import Path
+
+import streamlit as st
 from streamlit.components.v1 import declare_component
+
 from access_control import (
-    get_user_role, get_available_tabs, get_tab_labels,
-    verify_password, get_all_users, get_user_display_name
+    USERS,
+    Role,
+    get_all_users,
+    get_user_display_name,
+    get_user_role,
+    verify_password,
 )
-from access_control import Role, USERS
-from auth_sessions import SessionStore, SESSION_TTL
+from auth_sessions import SESSION_TTL, SessionStore
+from db import get_pool
 
 cookie_component = declare_component(
     "analytics_session_cookie", path=str(Path(__file__).parent / "ui" / "session_cookie")
@@ -17,14 +22,12 @@ cookie_component = declare_component(
 
 
 @st.cache_resource
-def _session_store(path):
-    return SessionStore(path)
+def _session_store():
+    return SessionStore(get_pool())
 
 
 def _store():
-    return _session_store(os.environ.get(
-        "ANALYTICS_SESSION_DB", str(Path(__file__).parent / "data" / "auth_sessions.sqlite3")
-    ))
+    return _session_store()
 
 
 def _cookie_request(operation, **kwargs):
