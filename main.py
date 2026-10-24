@@ -13,6 +13,7 @@ import pandas as pd
 
 from config import MONTH_NAMES_RU
 from data.pipeline import process_all_tasks_cached
+from ui.tabs.dashboard import render_dashboard_tab
 from ui.tabs.overview import render_overview_tab
 from ui.tabs.periods import render_periods_tab
 from ui.tabs.estimates import render_estimates_tab
@@ -242,31 +243,35 @@ def run_streamlit_app():
     available_tabs = get_available_tabs(user_role)
     tab_labels = get_tab_labels()
 
-    if summary_df.empty:
-        st.warning(f"⚠️ В выбранном периоде ({sel_label}) нет движения по статусам.")
+    # Динамически создаём навигацию на основе роли
+    tabs_to_render = [tab for tab in [
+        "dashboard", "overview", "periods", "estimates", "deadlines", "types", "priorities",
+        "qa", "dev", "analytics", "detail"
+    ] if tab in available_tabs]
+
+    nav_labels = [tab_labels[t] for t in tabs_to_render]
+    nav_col, content_col = st.columns([1, 4])
+    with nav_col:
+        selected_label = st.radio(
+            "Разделы",
+            options=nav_labels,
+            key="main_nav",
+            label_visibility="collapsed",
+        )
+    selected_key = tabs_to_render[nav_labels.index(selected_label)]
+
+    if selected_key == "dashboard":
+        with content_col:
+            render_dashboard_tab(global_summary_df, full_raw_df=full_raw_df)
+    elif summary_df.empty:
+        with content_col:
+            st.warning(f"⚠️ В выбранном периоде ({sel_label}) нет движения по статусам.")
     else:
         # Фильтруем данные по роли
         summary_df = filter_summary_by_role(summary_df, user_role, user_name)
         qa_iter_df = filter_iter_df_by_role(qa_iter_df, user_role, user_name)
         dev_iter_df = filter_iter_df_by_role(dev_iter_df, user_role, user_name)
         an_iter_df = filter_iter_df_by_role(an_iter_df, user_role, user_name)
-
-        # Динамически создаём навигацию на основе роли
-        tabs_to_render = [tab for tab in [
-            "overview", "periods", "estimates", "deadlines", "types", "priorities",
-            "qa", "dev", "analytics", "detail"
-        ] if tab in available_tabs]
-
-        nav_labels = [tab_labels[t] for t in tabs_to_render]
-        nav_col, content_col = st.columns([1, 4])
-        with nav_col:
-            selected_label = st.radio(
-                "Разделы",
-                options=nav_labels,
-                key="main_nav",
-                label_visibility="collapsed",
-            )
-        selected_key = tabs_to_render[nav_labels.index(selected_label)]
 
         with content_col:
             if selected_key == "overview":

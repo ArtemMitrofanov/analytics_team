@@ -13,6 +13,7 @@ def _hash(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
 
 ALL_TABS = [
+    "dashboard",     # 📈 Дашборд (только admin, общекомандные данные)
     "overview",      # 🌐 Общая информация
     "periods",       # 📅 Динамика по периодам
     "estimates",     # 🎯 Оценка задач
@@ -34,6 +35,7 @@ ROLE_TABS: dict[Role, list[str]] = {
 }
 
 TAB_LABELS = {
+    "dashboard": "Дашборд",
     "overview": "Общая информация",
     "periods": "Динамика по периодам",
     "estimates": "Оценка задач",
