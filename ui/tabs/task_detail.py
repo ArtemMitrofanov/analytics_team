@@ -4,6 +4,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 from config import ALL_TRACKED_STATUSES
+from ui.bento import render_plotly
 
 
 def render_task_detail_tab(summary_df: pd.DataFrame, unique_tasks: Sequence[str]):
@@ -36,6 +37,6 @@ def render_task_detail_tab(summary_df: pd.DataFrame, unique_tasks: Sequence[str]
             hole=0.45,
         )
         fig_task_pie.update_layout(height=350)
-        st.plotly_chart(fig_task_pie, use_container_width=True, key=f"chart_task_pie_{selected_task}")
+        render_plotly(fig_task_pie, key=f"chart_task_pie_{selected_task}")
 
     status_breakdown = ", ".join([f"{lbl}: {val}д" for lbl, val in zip(task_status_labels, task_status_values)])

@@ -3,6 +3,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 from config import TSHIRT_ORDER, CORE_QA_TEAM, CORE_DEV_TEAM, CORE_ANALYTICS_TEAM
+from ui.bento import active_theme_mode, bento_palette, render_plotly
 from utils.stats import calc_stats
 
 
@@ -16,6 +17,7 @@ def render_estimates_tab(
     st.caption("Сопоставление плановых и фактических размеров (XS, S, M, L, XL) и калибровка фактическими рабочими днями")
 
     est_df = summary_df.copy()
+    palette = bento_palette(active_theme_mode())
 
     def eval_accuracy(plan_col: str, fact_col: str, data: pd.DataFrame):
         if plan_col not in data.columns or fact_col not in data.columns:
@@ -90,10 +92,10 @@ def render_estimates_tab(
                 color="Тип",
                 barmode="group",
                 title=f"Распределение {role_name}: План vs Факт",
-                color_discrete_map={"План": "#1f77b4", "Факт": "#2ca02c"}
+                color_discrete_map={"План": palette["indigo"], "Факт": palette["emerald"]}
             )
             fig_pf.update_layout(height=300)
-            st.plotly_chart(fig_pf, use_container_width=True, key=f"chart_estimates_dist_{role_name}")
+            render_plotly(fig_pf, key=f"chart_estimates_dist_{role_name}")
 
         # Эффективность сотрудников по факт-оценке (для всех ролей) — только таблица
         if core_team is not None and iter_df is not None and not iter_df.empty and fact_col in data.columns:

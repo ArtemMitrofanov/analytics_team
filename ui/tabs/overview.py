@@ -12,6 +12,7 @@ from config import (
     STATUS_DEV_REVIEW,
     STATUS_QA_WORK,
 )
+from ui.bento import active_theme_mode, bento_palette, render_plotly
 from utils.stats import calc_stats
 
 
@@ -20,6 +21,7 @@ def render_overview_tab(
     net_day_hours: float = 7.0
 ):
     st.subheader("🌐 Сквозная воронка поставки (Аналитика → Разработка → QA)")
+    palette = bento_palette(active_theme_mode())
     mean_lead, med_lead, p85_lead, _ = calc_stats(summary_df.get("Полный Lead Time (д.)", pd.Series(dtype=float)))
     mean_wait, med_wait, p85_wait, _ = calc_stats(summary_df.get("Всего очередей (д.)", pd.Series(dtype=float)))
     mean_work, med_work, p85_work, _ = calc_stats(summary_df.get("Чистая работа (д.)", pd.Series(dtype=float)))
@@ -59,11 +61,54 @@ def render_overview_tab(
     st.markdown("---")
     st.subheader("Сравнение времени этапов по задачам")
     fig_phases = go.Figure()
-    fig_phases.add_trace(go.Bar(name="Аналитика (Очередь/Ревью)", x=summary_df["Задача"], y=summary_df.get("Очередь/Ревью Аналитики (д.)", 0), marker_color="#ffbb78"))
-    fig_phases.add_trace(go.Bar(name="Аналитика (Работа)", x=summary_df["Задача"], y=summary_df.get("В аналитике (д.)", 0), marker_color="#aec7e8"))
-    fig_phases.add_trace(go.Bar(name="Разработка (Очередь/Ревью)", x=summary_df["Задача"], y=summary_df.get("Очередь/Код Ревью Dev (д.)", 0), marker_color="#ff7f0e"))
-    fig_phases.add_trace(go.Bar(name="Разработка (Работа)", x=summary_df["Задача"], y=summary_df.get("В разработке (д.)", 0), marker_color="#1f77b4"))
-    fig_phases.add_trace(go.Bar(name="QA (Очередь/Доработки)", x=summary_df["Задача"], y=summary_df.get("Очередь ожидания QA (дни)", 0) + summary_df.get("Доработки у dev (дни)", 0), marker_color="#d62728"))
-    fig_phases.add_trace(go.Bar(name="QA (Тестирование)", x=summary_df["Задача"], y=summary_df.get("В тестировании (дни)", 0), marker_color="#2ca02c"))
+    fig_phases.add_trace(
+        go.Bar(
+            name="Аналитика (Очередь/Ревью)",
+            x=summary_df["Задача"],
+            y=summary_df.get("Очередь/Ревью Аналитики (д.)", 0),
+            marker_color=palette["amber"],
+        )
+    )
+    fig_phases.add_trace(
+        go.Bar(
+            name="Аналитика (Работа)",
+            x=summary_df["Задача"],
+            y=summary_df.get("В аналитике (д.)", 0),
+            marker_color=palette["cyan"],
+        )
+    )
+    fig_phases.add_trace(
+        go.Bar(
+            name="Разработка (Очередь/Ревью)",
+            x=summary_df["Задача"],
+            y=summary_df.get("Очередь/Код Ревью Dev (д.)", 0),
+            marker_color=palette["violet"],
+        )
+    )
+    fig_phases.add_trace(
+        go.Bar(
+            name="Разработка (Работа)",
+            x=summary_df["Задача"],
+            y=summary_df.get("В разработке (д.)", 0),
+            marker_color=palette["indigo"],
+        )
+    )
+    fig_phases.add_trace(
+        go.Bar(
+            name="QA (Очередь/Доработки)",
+            x=summary_df["Задача"],
+            y=summary_df.get("Очередь ожидания QA (дни)", 0)
+            + summary_df.get("Доработки у dev (дни)", 0),
+            marker_color=palette["rose"],
+        )
+    )
+    fig_phases.add_trace(
+        go.Bar(
+            name="QA (Тестирование)",
+            x=summary_df["Задача"],
+            y=summary_df.get("В тестировании (дни)", 0),
+            marker_color=palette["emerald"],
+        )
+    )
     fig_phases.update_layout(barmode="stack", xaxis_title="Задача", yaxis_title="Рабочие дни (д.)", height=380)
-    st.plotly_chart(fig_phases, use_container_width=True, key="chart_overview_phases")
+    render_plotly(fig_phases, key="chart_overview_phases")

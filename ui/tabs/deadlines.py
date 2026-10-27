@@ -3,10 +3,13 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
+from ui.bento import active_theme_mode, bento_palette, render_plotly
+
 
 def render_deadlines_tab(summary_df: pd.DataFrame):
     st.subheader("⏰ Контроль выполнения обязательств и дедлайнов (SLA)")
     st.caption("Анализ соблюдения сроков заказчика, частоты переносов дедлайнов и просрочек")
+    palette = bento_palette(active_theme_mode())
 
     if "has_deadline" not in summary_df.columns:
         st.info("Поле дедлайнов не найдено в структуре данных.")
@@ -44,14 +47,14 @@ def render_deadlines_tab(summary_df: pd.DataFrame):
                 hole=0.45,
                 color="sla_status",
                 color_discrete_map={
-                    "В срок": "#2ca02c",
-                    "В работе (в графике)": "#1f77b4",
-                    "С опозданием": "#d62728",
-                    "В работе (просрочено)": "#ff7f0e",
+                    "В срок": palette["emerald"],
+                    "В работе (в графике)": palette["indigo"],
+                    "С опозданием": palette["rose"],
+                    "В работе (просрочено)": palette["amber"],
                 }
             )
             fig_sla_pie.update_layout(height=340)
-            st.plotly_chart(fig_sla_pie, use_container_width=True, key="chart_deadlines_sla_pie")
+            render_plotly(fig_sla_pie, key="chart_deadlines_sla_pie")
 
         with c_dl_bar:
             if not shifted_tasks.empty:
@@ -60,10 +63,10 @@ def render_deadlines_tab(summary_df: pd.DataFrame):
                     x="deadline_slippage_days",
                     nbins=15,
                     title="Распределение величины переноса дедлайнов (в днях)",
-                    color_discrete_sequence=["#ff7f0e"]
+                    color_discrete_sequence=[palette["amber"]]
                 )
                 fig_slip_hist.update_layout(height=340, xaxis_title="Сдвиг дедлайна (календарных дней)", yaxis_title="Количество задач")
-                st.plotly_chart(fig_slip_hist, use_container_width=True, key="chart_deadlines_slip_hist")
+                render_plotly(fig_slip_hist, key="chart_deadlines_slip_hist")
             else:
                 st.info("В выборке нет задач с переносами дедлайнов.")
 

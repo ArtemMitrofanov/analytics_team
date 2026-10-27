@@ -15,6 +15,7 @@ from access_control import (
 )
 from auth_sessions import SESSION_TTL, SessionStore
 from db import get_pool
+from ui.bento import render_theme_toggle
 
 cookie_component = declare_component(
     "analytics_session_cookie", path=str(Path(__file__).parent / "ui" / "session_cookie")
@@ -87,6 +88,7 @@ def render_login_page() -> bool:
     # Центрированная форма входа
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
+        render_theme_toggle()
         st.markdown("## 🔐 Вход в систему")
         st.markdown("---")
         if st.session_state.get("auth_cookie_error"):

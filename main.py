@@ -22,7 +22,7 @@ from ui.tabs.types import render_types_tab
 from ui.tabs.priorities import render_priorities_tab
 from ui.tabs.role_view import render_role_tab
 from ui.tabs.task_detail import render_task_detail_tab
-from ui.theme import inject_theme
+from ui.bento import inject_theme, render_theme_toggle
 from db import (
     get_all_events, get_summary_stats, clear_database, get_db_fingerprint
 )
@@ -68,6 +68,10 @@ def run_streamlit_app():
     user_name = st.session_state.user_name
     user_role = st.session_state.user_role
     is_admin = user_role == "admin"
+
+    _, theme_col = st.columns([6, 1])
+    with theme_col:
+        render_theme_toggle()
 
     # Читаем все события из PostgreSQL для аналитики
     full_raw_df = get_all_events()

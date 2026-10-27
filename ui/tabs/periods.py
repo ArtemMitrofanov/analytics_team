@@ -3,6 +3,8 @@ from typing import List, Dict, Any
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+
+from ui.bento import active_theme_mode, bento_palette, render_plotly
 from utils.stats import calc_stats
 
 
@@ -13,6 +15,7 @@ def render_periods_tab(
     global_summary_df: pd.DataFrame
 ):
     st.subheader("📅 Динамика по периодам")
+    palette = bento_palette(active_theme_mode())
     st.caption("Задачи атрибутируются в период, в котором они были завершены (статусы: Протестировано / К релизу / Завершено). Задачи без завершения попадают в «В работе».")
 
     compare_scale = st.radio(
@@ -147,10 +150,10 @@ def render_periods_tab(
                 barmode="group",
                 title="Сквозной Lead Time завершённых задач (Среднее / Медиана / P85)",
                 text_auto=".2f",
-                color_discrete_sequence=["#1f77b4", "#aec7e8", "#ff7f0e"]
+                color_discrete_sequence=[palette["indigo"], palette["cyan"], palette["violet"]]
             )
             fig_lt.update_layout(height=360, yaxis_title="Рабочие дни (д.)")
-            st.plotly_chart(fig_lt, use_container_width=True, key="chart_periods_lt")
+            render_plotly(fig_lt, key="chart_periods_lt")
 
         with c_g2:
             fig_work_wait = px.bar(
@@ -160,10 +163,10 @@ def render_periods_tab(
                 barmode="group",
                 title="Соотношение чистой работы и очередей (д.)",
                 text_auto=".2f",
-                color_discrete_sequence=["#2ca02c", "#d62728"]
+                color_discrete_sequence=[palette["emerald"], palette["rose"]]
             )
             fig_work_wait.update_layout(height=360, yaxis_title="Рабочие дни (д.)")
-            st.plotly_chart(fig_work_wait, use_container_width=True, key="chart_periods_work_wait")
+            render_plotly(fig_work_wait, key="chart_periods_work_wait")
 
         st.markdown("---")
         st.markdown("#### 2. Динамика метрик и Flow по ролям")
@@ -184,10 +187,10 @@ def render_periods_tab(
                 barmode="group",
                 title="Динамика этапа QA (в днях)",
                 text_auto=".2f",
-                color_discrete_sequence=["#2ca02c", "#d62728", "#1f77b4"]
+                color_discrete_sequence=[palette["emerald"], palette["amber"], palette["indigo"]]
             )
             fig_qa_cmp.update_layout(height=350, yaxis_title="Рабочие дни (д.)")
-            st.plotly_chart(fig_qa_cmp, use_container_width=True, key="chart_periods_qa_cmp")
+            render_plotly(fig_qa_cmp, key="chart_periods_qa_cmp")
 
         with role_tab_dev:
             dev_cmp_cols = ["Период", "Dev В разработке Ср (д.)", "Dev Очередь/Ревью Ср (д.)", "Dev Цикл Ср (д.)", "Dev Flow (%)"]
@@ -199,10 +202,10 @@ def render_periods_tab(
                 barmode="group",
                 title="Динамика этапа разработки (в днях)",
                 text_auto=".2f",
-                color_discrete_sequence=["#1f77b4", "#ff7f0e", "#9467bd"]
+                color_discrete_sequence=[palette["indigo"], palette["violet"], palette["cyan"]]
             )
             fig_dev_cmp.update_layout(height=350, yaxis_title="Рабочие дни (д.)")
-            st.plotly_chart(fig_dev_cmp, use_container_width=True, key="chart_periods_dev_cmp")
+            render_plotly(fig_dev_cmp, key="chart_periods_dev_cmp")
 
         with role_tab_an:
             an_cmp_cols = ["Период", "An В аналитике Ср (д.)", "An Очередь/Ревью Ср (д.)", "An Цикл Ср (д.)", "An Flow (%)"]
@@ -214,9 +217,9 @@ def render_periods_tab(
                 barmode="group",
                 title="Динамика этапа аналитики (в днях)",
                 text_auto=".2f",
-                color_discrete_sequence=["#aec7e8", "#ffbb78", "#2ca02c"]
+                color_discrete_sequence=[palette["cyan"], palette["amber"], palette["emerald"]]
             )
             fig_an_cmp.update_layout(height=350, yaxis_title="Рабочие дни (д.)")
-            st.plotly_chart(fig_an_cmp, use_container_width=True, key="chart_periods_an_cmp")
+            render_plotly(fig_an_cmp, key="chart_periods_an_cmp")
     else:
         st.info("Нет завершённых задач в выбранных периодах.")

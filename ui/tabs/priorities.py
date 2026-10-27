@@ -3,12 +3,14 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 from config import PRIORITY_ORDER
+from ui.bento import active_theme_mode, bento_palette, render_plotly
 from utils.stats import calc_stats
 
 
 def render_priorities_tab(summary_df: pd.DataFrame):
     st.subheader("⚡ Влияние приоритета на прохождение очереди и Lead Time")
     st.caption("Проверка дисциплины очередей: насколько быстрее берутся в работу высокоприоритетные задачи")
+    palette = bento_palette(active_theme_mode())
 
     prio_df = summary_df.copy()
     if "Приоритет" not in prio_df.columns:
@@ -57,10 +59,10 @@ def render_priorities_tab(summary_df: pd.DataFrame):
             barmode="group",
             title="Сравнение очередей и Lead Time по уровням приоритета (д.)",
             text_auto=".2f",
-            color_discrete_sequence=["#d62728", "#1f77b4"]
+            color_discrete_sequence=[palette["rose"], palette["indigo"]]
         )
         fig_prio_wait.update_layout(height=350, yaxis_title="Рабочие дни (д.)")
-        st.plotly_chart(fig_prio_wait, use_container_width=True, key="chart_priorities_wait_bar")
+        render_plotly(fig_prio_wait, key="chart_priorities_wait_bar")
 
     with p_col2:
         fig_prio_flow = px.bar(
@@ -69,10 +71,10 @@ def render_priorities_tab(summary_df: pd.DataFrame):
             y="Flow Efficiency (%)",
             title="Flow Efficiency по приоритетам (доля полезного времени)",
             text_auto=".1f",
-            color_discrete_sequence=["#2ca02c"]
+            color_discrete_sequence=[palette["emerald"]]
         )
         fig_prio_flow.update_layout(height=350, yaxis_title="% полезной работы")
-        st.plotly_chart(fig_prio_flow, use_container_width=True, key="chart_priorities_flow_bar")
+        render_plotly(fig_prio_flow, key="chart_priorities_flow_bar")
 
     st.markdown("---")
     st.markdown("#### 2. Реестр задач с анализом очередей по приоритетам")

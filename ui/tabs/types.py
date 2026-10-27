@@ -2,12 +2,15 @@
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+
+from ui.bento import active_theme_mode, bento_palette, render_plotly
 from utils.stats import calc_stats
 
 
 def render_types_tab(summary_df: pd.DataFrame):
     st.subheader("🐞 Анализ структуры потока: Дефекты и Фичи / Задачи")
     st.caption("Оценка баланса создания новой ценности и устранения дефектов")
+    palette = bento_palette(active_theme_mode())
 
     types_df = summary_df.copy()
     if "Тип задачи" not in types_df.columns:
@@ -44,16 +47,16 @@ def render_types_tab(summary_df: pd.DataFrame):
             hole=0.45,
             color="Тип задачи",
             color_discrete_map={
-                "Дефект": "#d62728",
-                "Фича / Задача": "#1f77b4",
-                "Эпик": "#9467bd",
-                "Эксплуатация": "#ff7f0e",
-                "Техдолг": "#7f7f7f",
-                "Не определен": "#c7c7c7",
+                "Дефект": palette["rose"],
+                "Фича / Задача": palette["indigo"],
+                "Эпик": palette["violet"],
+                "Эксплуатация": palette["cyan"],
+                "Техдолг": palette["muted"],
+                "Не определен": palette["slate"],
             }
         )
         fig_type_pie.update_layout(height=340)
-        st.plotly_chart(fig_type_pie, use_container_width=True, key="chart_types_pie")
+        render_plotly(fig_type_pie, key="chart_types_pie")
 
     with t_col_g2:
         compare_phases_data = []
@@ -74,10 +77,15 @@ def render_types_tab(summary_df: pd.DataFrame):
                 barmode="group",
                 title="Среднее время фаз: Баги vs Фичи (в днях)",
                 text_auto=".2f",
-                color_discrete_sequence=["#aec7e8", "#1f77b4", "#2ca02c", "#d62728"]
+                color_discrete_sequence=[
+                    palette["cyan"],
+                    palette["indigo"],
+                    palette["emerald"],
+                    palette["rose"],
+                ]
             )
             fig_comp_bar.update_layout(height=340, yaxis_title="Рабочие дни (д.)")
-            st.plotly_chart(fig_comp_bar, use_container_width=True, key="chart_types_comp_bar")
+            render_plotly(fig_comp_bar, key="chart_types_comp_bar")
 
     st.markdown("---")
     st.markdown("#### 📋 Сводная таблица по типам задач")
