@@ -57,6 +57,7 @@ def render_role_tab(
     wait_col: Optional[str] = None,
     rev_col: Optional[str] = None,
     global_summary_df: pd.DataFrame = None,
+    queue_events: pd.DataFrame = None,
 ):
     period_active = start_date is not None and end_date is not None
 
@@ -114,6 +115,11 @@ def render_role_tab(
             c4.metric("Flow этапа", f"{f_m:.1f}%", f"Мед: {f_med:.1f}% | P85: {f_p85:.1f}%")
 
         st.markdown("---")
+        if role_key == "qa":
+            from ui.qa_queue import render_qa_queue
+
+            render_qa_queue(queue_events, start_date, end_date)
+            st.markdown("---")
         st.markdown("##### Сводная таблица по задачам (в днях)")
         if wait_col and rev_col and rev_col in summary_p.columns:
             table_cols_ext = list(table_cols)

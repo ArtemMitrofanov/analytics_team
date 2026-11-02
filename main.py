@@ -56,7 +56,7 @@ def run_streamlit_app():
         page_title="Team Process Analytics",
         page_icon="📊",
         layout="wide",
-        initial_sidebar_state="collapsed",
+        initial_sidebar_state="expanded",
     )
     inject_theme()
     st.title("📊 Комплексный процессный аудит команды")
@@ -267,7 +267,7 @@ def run_streamlit_app():
     if selected_key == "dashboard":
         with content_col:
             render_dashboard_tab(global_summary_df, full_raw_df=full_raw_df)
-    elif summary_df.empty:
+    elif summary_df.empty and selected_key != "qa":
         with content_col:
             st.warning(f"⚠️ В выбранном периоде ({sel_label}) нет движения по статусам.")
     else:
@@ -299,6 +299,7 @@ def run_streamlit_app():
             elif selected_key == "qa":
                 render_role_tab(
                     role_title="QA",
+                    queue_events=full_raw_df,
                     work_status_col="В тестировании (дни)",
                     queue_status_col="Очередь ожидания QA (дни)",
                     cycle_col="Циклтайм QA (дни)",
