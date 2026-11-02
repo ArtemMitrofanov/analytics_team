@@ -23,7 +23,7 @@ AN_GROUP = "an"
 
 METRIC_GROUP_LABELS: dict[str, str] = {
     CORE_GROUP: "Сквозные",
-    QA_GROUP: "QA",
+    QA_GROUP: "Тестирование",
     DEV_GROUP: "Разработка",
     AN_GROUP: "Аналитика",
 }
@@ -60,21 +60,21 @@ METRIC_SPECS: tuple[MetricSpec, ...] = (
     ),
     MetricSpec(
         "lead_time_mean",
-        "Lead Time, среднее",
+        "Срок выполнения, среднее",
         CORE_GROUP,
         "mean",
         column="Полный Lead Time (д.)",
     ),
     MetricSpec(
         "lead_time_median",
-        "Lead Time, медиана",
+        "Срок выполнения, медиана",
         CORE_GROUP,
         "median",
         column="Полный Lead Time (д.)",
     ),
     MetricSpec(
         "lead_time_p85",
-        "Lead Time, P85",
+        "Срок выполнения, P85",
         CORE_GROUP,
         "p85",
         column="Полный Lead Time (д.)",
@@ -110,7 +110,7 @@ METRIC_SPECS: tuple[MetricSpec, ...] = (
     ),
     MetricSpec(
         "flow_mean",
-        "Сквозной Flow, среднее",
+        "Эффективность потока, среднее",
         CORE_GROUP,
         "mean",
         column="Сквозной Flow Efficiency (%)",
@@ -122,7 +122,7 @@ METRIC_SPECS: tuple[MetricSpec, ...] = (
     # QA
     MetricSpec(
         "qa_cycle_mean",
-        "QA: цикл, среднее",
+        "Тестирование: цикл, среднее",
         QA_GROUP,
         "mean",
         column="Циклтайм QA (дни)",
@@ -130,7 +130,7 @@ METRIC_SPECS: tuple[MetricSpec, ...] = (
     ),
     MetricSpec(
         "qa_cycle_median",
-        "QA: цикл, медиана",
+        "Тестирование: цикл, медиана",
         QA_GROUP,
         "median",
         column="Циклтайм QA (дни)",
@@ -138,7 +138,7 @@ METRIC_SPECS: tuple[MetricSpec, ...] = (
     ),
     MetricSpec(
         "qa_queue_mean",
-        "QA: очередь, среднее",
+        "Тестирование: очередь, среднее",
         QA_GROUP,
         "mean",
         column="Очередь ожидания QA (дни)",
@@ -146,7 +146,7 @@ METRIC_SPECS: tuple[MetricSpec, ...] = (
     ),
     MetricSpec(
         "qa_flow_mean",
-        "QA: Flow, среднее",
+        "Тестирование: эффективность потока, среднее",
         QA_GROUP,
         "mean",
         column="Flow Efficiency QA (%)",
@@ -159,7 +159,7 @@ METRIC_SPECS: tuple[MetricSpec, ...] = (
     # Разработка
     MetricSpec(
         "dev_cycle_mean",
-        "Dev: цикл, среднее",
+        "Разработка: цикл, среднее",
         DEV_GROUP,
         "mean",
         column="Цикл Разработки (д.)",
@@ -167,7 +167,7 @@ METRIC_SPECS: tuple[MetricSpec, ...] = (
     ),
     MetricSpec(
         "dev_cycle_median",
-        "Dev: цикл, медиана",
+        "Разработка: цикл, медиана",
         DEV_GROUP,
         "median",
         column="Цикл Разработки (д.)",
@@ -175,7 +175,7 @@ METRIC_SPECS: tuple[MetricSpec, ...] = (
     ),
     MetricSpec(
         "dev_queue_mean",
-        "Dev: очередь, среднее",
+        "Разработка: очередь, среднее",
         DEV_GROUP,
         "mean",
         column="Очередь/Код Ревью Dev (д.)",
@@ -183,7 +183,7 @@ METRIC_SPECS: tuple[MetricSpec, ...] = (
     ),
     MetricSpec(
         "dev_flow_mean",
-        "Dev: Flow, среднее",
+        "Разработка: эффективность потока, среднее",
         DEV_GROUP,
         "mean",
         column="Flow Разработки (%)",
@@ -196,7 +196,7 @@ METRIC_SPECS: tuple[MetricSpec, ...] = (
     # Аналитика
     MetricSpec(
         "an_cycle_mean",
-        "An: цикл, среднее",
+        "Аналитика: цикл, среднее",
         AN_GROUP,
         "mean",
         column="Цикл Аналитики (д.)",
@@ -204,7 +204,7 @@ METRIC_SPECS: tuple[MetricSpec, ...] = (
     ),
     MetricSpec(
         "an_cycle_median",
-        "An: цикл, медиана",
+        "Аналитика: цикл, медиана",
         AN_GROUP,
         "median",
         column="Цикл Аналитики (д.)",
@@ -212,7 +212,7 @@ METRIC_SPECS: tuple[MetricSpec, ...] = (
     ),
     MetricSpec(
         "an_queue_mean",
-        "An: очередь, среднее",
+        "Аналитика: очередь, среднее",
         AN_GROUP,
         "mean",
         column="Очередь/Ревью Аналитики (д.)",
@@ -220,7 +220,7 @@ METRIC_SPECS: tuple[MetricSpec, ...] = (
     ),
     MetricSpec(
         "an_flow_mean",
-        "An: Flow, среднее",
+        "Аналитика: эффективность потока, среднее",
         AN_GROUP,
         "mean",
         column="Flow Аналитики (%)",

@@ -150,9 +150,9 @@ def _render_kpis(wide: pd.DataFrame, start: pd.Timestamp, end: pd.Timestamp) -> 
 
     kpis = (
         ("tasks_done", "Завершено задач", "normal", "check", "emerald"),
-        ("lead_time_mean", "Lead Time, среднее", "inverse", "clock", "indigo"),
+        ("lead_time_mean", "Срок выполнения, среднее", "inverse", "clock", "indigo"),
         ("queue_mean", "Очереди, среднее", "inverse", "layers", "violet"),
-        ("flow_mean", "Сквозной Flow", "normal", "gauge", "cyan"),
+        ("flow_mean", "Эффективность потока", "normal", "gauge", "cyan"),
     )
     cols = st.columns([1.3, 1, 1, 1], gap="medium")
     for col, (key, label, delta_color, icon, accent) in zip(cols, kpis):
@@ -313,7 +313,7 @@ def _render_main_chart(
             x=label,
             y=1,
             yref="paper",
-            text="MTD",
+            text="Неполный месяц",
             showarrow=False,
             font=dict(size=10, color=muted),
             yshift=8,
@@ -373,7 +373,7 @@ def _render_signal_panel(
     series = subset.get(spec.key, pd.Series(dtype=float))
     anomaly_text, is_anomaly = _anomaly_note(series)
     has_partial = any(bool(value) for value in subset.get("is_partial", pd.Series(dtype=bool)))
-    mtd_text = "есть MTD" if has_partial else "нет"
+    mtd_text = "неполный" if has_partial else "нет"
 
     if horizon <= 0:
         status, tone, value, value_label = "Прогноз отключён", "neutral", "—", "Горизонт 0 месяцев"
@@ -408,8 +408,8 @@ def _render_signal_panel(
 
     rows = [
         ("Тренд", trend_text, False),
-        ("Качество backtest", quality_text, False),
-        ("MAPE", mape_text, False),
+        ("Проверка на истории", quality_text, False),
+        ("Ошибка прогноза, %", mape_text, False),
         ("Аномалии", anomaly_text, is_anomaly),
         ("Текущий месяц", mtd_text, False),
     ]
@@ -424,7 +424,7 @@ def _render_signal_panel(
     st.markdown(
         '<div class="bento-panel">'
         '<div class="bento-panel__head"><div>'
-        '<span class="bento-eyebrow">Signal</span>'
+        '<span class="bento-eyebrow">Показатели</span>'
         '<div class="bento-panel__title">Прогноз и качество</div>'
         "</div>"
         f'<span class="bento-status bento-status--{tone}">'
@@ -474,7 +474,7 @@ def _render_forecast_table(
             else "—"
         )
         row["Качество"] = _QUALITY_LABELS.get(result.quality, result.quality)
-        row["MAPE"] = f"{result.backtest_mape:.1f}%" if result.backtest_mape is not None else "—"
+        row["Ошибка прогноза, %"] = f"{result.backtest_mape:.1f}%" if result.backtest_mape is not None else "—"
         rows.append(row)
 
     if rows:
@@ -495,7 +495,7 @@ def _render_monthly_table(
     for month, row_data in subset.iterrows():
         row: dict[str, Any] = {"Месяц": format_month(month)}
         if bool(row_data.get("is_partial", False)):
-            row["Месяц"] += " (MTD)"
+            row["Месяц"] += " (неполный месяц)"
         if not bool(row_data.get("has_data", True)):
             row["Месяц"] += " · нет данных"
         row["Задач завершено"] = _fmt_value(get_metric_spec("tasks_done"), row_data.get("tasks_done"))
@@ -592,11 +592,11 @@ def render_dashboard_tab(
 
     render_hero(
         "Дашборд команды",
-        "Динамика Lead Time, очередей и Flow Efficiency по месяцам. Текущий месяц "
-        "показан как MTD и не участвует в прогнозе: прогноз — статистическая "
+        "Динамика сроков выполнения, очередей и эффективности потока по месяцам. Текущий месяц "
+        "показан за прошедшие дни и не участвует в прогнозе: прогноз — статистическая "
         "экстраполяция тренда, а не обязательство.",
-        eyebrow="Process intelligence",
-        chips=("Lead Time", "Flow Efficiency", "Throughput", "Forecast", "Anomaly watch"),
+        eyebrow="Аналитика процессов",
+        chips=("Срок выполнения", "Эффективность потока", "Объём завершённых задач", "Прогноз", "Контроль отклонений"),
     )
 
     if summary_df is None or summary_df.empty:
@@ -626,7 +626,7 @@ def render_dashboard_tab(
         render_section_header(
             "Срез данных",
             "Период, горизонт прогноза и группа метрик.",
-            eyebrow="Controls",
+            eyebrow="Параметры",
         )
         filter_col1, filter_col2, filter_col3, filter_col4 = st.columns(
             [1.25, 1.25, 1.2, 1.5],
@@ -694,7 +694,7 @@ def render_dashboard_tab(
             ]
             if partial_months:
                 st.caption(
-                    f"**{format_month(partial_months[-1])} — MTD:** месяц ещё не завершён, "
+                    f"**{format_month(partial_months[-1])} — неполный месяц:** месяц ещё не завершён, "
                     "в тренд и прогноз не включается."
                 )
             elif horizon > 0:
@@ -716,8 +716,8 @@ def render_dashboard_tab(
             glass_panel_marker()
             render_section_header(
                 chart_title,
-                "Фактические значения, MTD и статистический прогноз.",
-                eyebrow="Trend",
+                "Фактические значения, неполный месяц и статистический прогноз.",
+                eyebrow="Динамика",
             )
             result = _render_main_chart(wide, selected_spec, start, end, horizon)
     with signal_col:
@@ -727,8 +727,8 @@ def render_dashboard_tab(
         glass_panel_marker()
         render_section_header(
             "Прогноз по метрикам",
-            "Экстраполяция по выбранной группе метрик и качество backtest.",
-            eyebrow="Forecast",
+            "Экстраполяция по выбранной группе метрик и проверка прогноза на исторических данных.",
+            eyebrow="Прогноз",
         )
         _render_forecast_table(wide, specs, start, end, horizon)
 
@@ -737,7 +737,7 @@ def render_dashboard_tab(
         render_section_header(
             "Помесячный срез",
             "Полная таблица значений и размер выборки по каждой метрике.",
-            eyebrow="Monthly",
+            eyebrow="По месяцам",
         )
         _render_monthly_table(wide, specs, start, end)
 
@@ -746,6 +746,6 @@ def render_dashboard_tab(
         render_section_header(
             "Детализация",
             "Задачи, завершённые в выбранном месяце, и экспорт в CSV.",
-            eyebrow="Drilldown",
+            eyebrow="Подробности",
         )
         _render_drilldown(summary_df, wide, start, end)
