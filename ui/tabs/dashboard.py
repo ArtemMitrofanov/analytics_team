@@ -609,7 +609,8 @@ def render_dashboard_tab(
     monthly_started = perf_counter()
     data_months = None
     if full_raw_df is not None and not full_raw_df.empty and "timestamp" in full_raw_df.columns:
-        data_months = pd.to_datetime(full_raw_df["timestamp"], errors="coerce").dt.to_period("M")
+        event_months = pd.to_datetime(full_raw_df["timestamp"], errors="coerce").dt.to_period("M")
+        data_months = event_months.dropna().unique()
 
     monthly = build_monthly_metrics(summary_df, data_months=data_months, today=today)
     if timings is not None:
