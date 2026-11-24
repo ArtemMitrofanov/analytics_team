@@ -1,9 +1,25 @@
 """data/pipeline.py — Быстрая пакетная обработка и кэширование результатов."""
+from hashlib import sha256
+from pathlib import Path
 from time import perf_counter
 
 import pandas as pd
 import streamlit as st
 from data.task_processor import process_single_task
+
+
+def _pipeline_version() -> str:
+    root = Path(__file__).resolve().parents[1]
+    digest = sha256(pd.__version__.encode())
+    for name in ("data/pipeline.py", "data/task_processor.py", "utils/time_calc.py",
+                 "config.py", "config/team.json", "db.py"):
+        path = root / name
+        if path.is_file():
+            digest.update(path.read_bytes())
+    return digest.hexdigest()
+
+
+PIPELINE_VERSION = _pipeline_version()
 
 
 def _process_all_tasks(
@@ -59,16 +75,19 @@ def _process_all_tasks(
     )
 
 
-@st.cache_data(show_spinner="Выполняется быстрый анализ журнала задач...")
+@st.cache_data(persist="disk", max_entries=8, show_spinner="Выполняется быстрый анализ журнала задач...")
 def process_all_tasks_cached(
     db_fingerprint: str,
     work_start_h: int,
     work_end_h: int,
     net_ratio: float,
     net_day_hours: float,
+    *,
+    pipeline_version: str,
+    database_key: str,
     _timings: dict[str, float] | None = None,
 ):
-    """Обрабатывает все задачи из PostgreSQL. Кэш ключируется по отпечатку БД, а не по DataFrame."""
+    """Кэширует расчёт по версии кода, базе, отпечатку данных и рабочим часам."""
     from db import get_all_events
 
     # Streamlit excludes underscore-prefixed arguments from the cache key.

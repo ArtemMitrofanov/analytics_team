@@ -1,5 +1,6 @@
 """main.py — Главная точка входа Streamlit приложения."""
 import sys
+from hashlib import sha256
 from pathlib import Path
 from time import perf_counter
 
@@ -13,7 +14,7 @@ for path in (str(APP_DIR), str(PROJECT_ROOT)):
 import pandas as pd
 
 from config import MONTH_NAMES_RU
-from data.pipeline import process_all_tasks_cached
+from data.pipeline import PIPELINE_VERSION, process_all_tasks_cached
 from ui.tabs.dashboard import render_dashboard_tab
 from ui.tabs.overview import render_overview_tab
 from ui.tabs.periods import render_periods_tab
@@ -25,7 +26,7 @@ from ui.tabs.role_view import render_role_tab
 from ui.tabs.task_detail import render_task_detail_tab
 from ui.bento import inject_theme, render_theme_toggle
 from db import (
-    get_all_events, get_summary_stats, clear_database, get_db_fingerprint
+    get_all_events, get_summary_stats, clear_database, get_db_fingerprint, get_dsn
 )
 from auth import (
     render_login_page, render_user_info_sidebar
@@ -39,6 +40,9 @@ REQUIRED_COLUMNS = {
     "timestamp", "changed_value", "added_values", "removed_values", "author_full_name"
 }
 OPTIONAL_COLUMNS = {"issue_id", "iissue_id", "activity_type"}
+DEFAULT_WORK_START = 9
+DEFAULT_WORK_END = 18
+DEFAULT_DEDUCT_HOURS = 2.0
 
 def validate_csv_schema(df: pd.DataFrame, filename: str) -> tuple[bool, list[str]]:
     """Проверяет наличие обязательных колонок в CSV. Возвращает (is_valid, errors)."""
@@ -72,6 +76,7 @@ def run_streamlit_app():
     user_name = st.session_state.user_name
     user_role = st.session_state.user_role
     is_admin = user_role == "admin"
+    database_key = sha256(get_dsn().encode()).hexdigest()
 
     _, theme_col = st.columns([6, 1])
     with theme_col:
@@ -134,9 +139,9 @@ def run_streamlit_app():
 
         st.markdown("---")
         st.header("⚙️ Параметры анализа")
-        work_start_h = st.number_input("Начало дня (час)", 0, 23, 9)
-        work_end_h = st.number_input("Конец дня (час)", 0, 23, 18)
-        deduct_hours = st.number_input("Обед + созвоны (часов)", 0.0, 8.0, 2.0)
+        work_start_h = st.number_input("Начало дня (час)", 0, 23, DEFAULT_WORK_START)
+        work_end_h = st.number_input("Конец дня (час)", 0, 23, DEFAULT_WORK_END)
+        deduct_hours = st.number_input("Обед + созвоны (часов)", 0.0, 8.0, DEFAULT_DEDUCT_HOURS)
         day_window = max(1.0, float(work_end_h - work_start_h))
         net_day_hours = max(1.0, day_window - deduct_hours)
         net_ratio = net_day_hours / day_window
@@ -155,6 +160,7 @@ def run_streamlit_app():
         if is_admin:
             if st.button("🗑️ Очистить базу", type="secondary"):
                 clear_database()
+                process_all_tasks_cached.clear()
                 st.success("База очищена")
                 st.rerun()
 
@@ -196,6 +202,16 @@ def run_streamlit_app():
                 total_new_rows += new_rows
                 st.success(f"✅ {f.name}: добавлено {new_rows} новых строк")
             
+            if total_new_rows > 0:
+                process_all_tasks_cached.clear()
+                default_window = float(DEFAULT_WORK_END - DEFAULT_WORK_START)
+                default_net_hours = default_window - DEFAULT_DEDUCT_HOURS
+                process_all_tasks_cached(
+                    get_db_fingerprint(), DEFAULT_WORK_START, DEFAULT_WORK_END,
+                    default_net_hours / default_window, default_net_hours,
+                    pipeline_version=PIPELINE_VERSION, database_key=database_key,
+                )
+
             if validation_errors:
                 for err in validation_errors:
                     st.error(err)
@@ -230,6 +246,7 @@ def run_streamlit_app():
         all_qa_waits,
     ) = process_all_tasks_cached(
         db_fingerprint, work_start_h, work_end_h, net_ratio, net_day_hours,
+        pipeline_version=PIPELINE_VERSION, database_key=database_key,
         _timings=timings,
     )
     timings["pipeline"] = perf_counter() - pipeline_started
