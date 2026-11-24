@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import replace
 from html import escape
 from time import perf_counter
-from typing import Any
+from typing import Any, Iterable
 
 import pandas as pd
 import plotly.graph_objects as go
@@ -582,6 +582,7 @@ def render_dashboard_tab(
     full_raw_df: pd.DataFrame | None = None,
     today: Any | None = None,
     *,
+    data_months: Iterable[Any] | None = None,
     timings: dict[str, float] | None = None,
 ) -> None:
     """Отрисовать вкладку «Дашборд» (админская, общекомандные данные)."""
@@ -607,8 +608,7 @@ def render_dashboard_tab(
         return
 
     monthly_started = perf_counter()
-    data_months = None
-    if full_raw_df is not None and not full_raw_df.empty and "timestamp" in full_raw_df.columns:
+    if data_months is None and full_raw_df is not None and not full_raw_df.empty and "timestamp" in full_raw_df.columns:
         event_months = pd.to_datetime(full_raw_df["timestamp"], errors="coerce").dt.to_period("M")
         data_months = event_months.dropna().unique()
 

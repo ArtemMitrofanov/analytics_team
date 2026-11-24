@@ -4,6 +4,7 @@ import io
 import os
 import threading
 from contextlib import contextmanager
+from datetime import date
 from pathlib import Path
 
 import pandas as pd
@@ -279,6 +280,17 @@ def get_all_events() -> pd.DataFrame:
             conn,
             'SELECT * FROM task_events ORDER BY task_id, "timestamp"',
         )
+
+
+def get_event_months() -> list[date]:
+    """Вернуть начала месяцев, в которых были события."""
+    with _connection() as conn:
+        rows = conn.execute(
+            """SELECT DISTINCT date_trunc('month', "timestamp")::date AS month
+               FROM task_events
+               ORDER BY month"""
+        ).fetchall()
+    return [month for (month,) in rows]
 
 
 def get_events_for_tasks(task_ids: list[str]) -> pd.DataFrame:

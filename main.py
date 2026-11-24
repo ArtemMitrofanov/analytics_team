@@ -26,7 +26,7 @@ from ui.tabs.role_view import render_role_tab
 from ui.tabs.task_detail import render_task_detail_tab
 from ui.bento import inject_theme, render_theme_toggle
 from db import (
-    get_all_events, get_summary_stats, clear_database, get_db_fingerprint, get_dsn
+    get_all_events, get_event_months, get_summary_stats, clear_database, get_db_fingerprint, get_dsn
 )
 from auth import (
     render_login_page, render_user_info_sidebar
@@ -82,12 +82,42 @@ def run_streamlit_app():
     with theme_col:
         render_theme_toggle()
 
-    # Читаем все события из PostgreSQL для аналитики
-    events_started = perf_counter()
-    full_raw_df = get_all_events()
-    timings["events"] = perf_counter() - events_started
+    upload_area = st.container()
+    available_tabs = get_available_tabs(user_role)
+    tab_labels = get_tab_labels()
 
-    periods_m = sorted(full_raw_df["timestamp"].dt.to_period("M").unique())
+    # Динамически создаём навигацию на основе роли
+    tabs_to_render = [tab for tab in [
+        "dashboard", "overview", "periods", "estimates", "deadlines", "types", "priorities",
+        "qa", "dev", "analytics", "detail"
+    ] if tab in available_tabs]
+
+    nav_labels = [tab_labels[t] for t in tabs_to_render]
+    nav_col, content_col = st.columns([1, 4])
+    with nav_col:
+        selected_label = st.radio(
+            "Разделы",
+            options=nav_labels,
+            key="main_nav",
+            label_visibility="collapsed",
+        )
+    selected_key = tabs_to_render[nav_labels.index(selected_label)]
+
+    stats_started = perf_counter()
+    stats = get_summary_stats()
+    timings["db_stats"] = perf_counter() - stats_started
+
+    if selected_key == "dashboard":
+        months_started = perf_counter()
+        periods_m = pd.PeriodIndex(get_event_months(), freq="M")
+        timings["event_months"] = perf_counter() - months_started
+        first_event, last_event = stats["earliest_event"], stats["latest_event"]
+    else:
+        full_raw_df = get_all_events()
+        timestamps = full_raw_df["timestamp"]
+        periods_m = sorted(timestamps.dt.to_period("M").unique())
+        first_event, last_event = timestamps.min(), timestamps.max()
+
     monthly_sprints_list = [
         {
             "period_name": f"{MONTH_NAMES_RU.get(p.month, str(p.month))} {p.year}",
@@ -101,7 +131,7 @@ def run_streamlit_app():
         for item in monthly_sprints_list
     }
 
-    periods_q = sorted(full_raw_df["timestamp"].dt.to_period("Q").unique())
+    periods_q = sorted({month.asfreq("Q") for month in periods_m})
     quarter_list = [
         {
             "period_name": f"Q{q.quarter} {q.year}",
@@ -122,19 +152,22 @@ def run_streamlit_app():
             options=["Весь период", "По месяцам (Спринты)", "По кварталам", "Пользовательский диапазон"],
             index=0,
         )
-        if period_mode == "По месяцам (Спринты)":
+        if len(periods_m) == 0 or first_event is None or last_event is None:
+            start_date, end_date = None, None
+            sel_label = "Весь период"
+        elif period_mode == "По месяцам (Спринты)":
             sel_label = st.selectbox("Выберите спринт:", options=list(sprint_lookup.keys()))
             start_date, end_date = sprint_lookup[sel_label]
         elif period_mode == "По кварталам":
             sel_label = st.selectbox("Выберите квартал:", options=list(quarter_lookup.keys()))
             start_date, end_date = quarter_lookup[sel_label]
         elif period_mode == "Пользовательский диапазон":
-            min_d, max_d = full_raw_df["timestamp"].min().date(), full_raw_df["timestamp"].max().date()
+            min_d, max_d = first_event.date(), last_event.date()
             d_range = st.date_input("Диапазон", value=(min_d, max_d))
             start_date, end_date = d_range if isinstance(d_range, tuple) and len(d_range) == 2 else (min_d, max_d)
             sel_label = f"{start_date} — {end_date}"
         else:
-            start_date, end_date = full_raw_df["timestamp"].min().date(), full_raw_df["timestamp"].max().date()
+            start_date, end_date = first_event.date(), last_event.date()
             sel_label = "Весь период"
 
         st.markdown("---")
@@ -148,9 +181,6 @@ def run_streamlit_app():
 
         st.markdown("---")
         st.header("🗄️ База данных (PostgreSQL)")
-        stats_started = perf_counter()
-        stats = get_summary_stats()
-        timings["db_stats"] = perf_counter() - stats_started
         st.metric("Загружено строк", f"{stats['total_rows']:,}")
         st.metric("Уникальных задач", f"{stats['unique_tasks']:,}")
         st.metric("Файлов загружено", f"{stats['loaded_files']:,}")
@@ -166,7 +196,7 @@ def run_streamlit_app():
 
     # Загрузка файлов — только для админа
     if is_admin:
-        uploaded_files = st.file_uploader("Загрузите CSV-файлы журнала задач", type=["csv"], accept_multiple_files=True)
+        uploaded_files = upload_area.file_uploader("Загрузите CSV-файлы журнала задач", type=["csv"], accept_multiple_files=True)
 
         if uploaded_files:
             dfs = []
@@ -200,7 +230,7 @@ def run_streamlit_app():
                 from db import load_dataframe_to_db
                 new_rows = load_dataframe_to_db(df_temp, f.name, file_hash)
                 total_new_rows += new_rows
-                st.success(f"✅ {f.name}: добавлено {new_rows} новых строк")
+                upload_area.success(f"✅ {f.name}: добавлено {new_rows} новых строк")
             
             if total_new_rows > 0:
                 process_all_tasks_cached.clear()
@@ -214,22 +244,18 @@ def run_streamlit_app():
 
             if validation_errors:
                 for err in validation_errors:
-                    st.error(err)
+                    upload_area.error(err)
                 st.stop()
 
             if total_new_rows > 0:
                 st.rerun()
 
-    if full_raw_df.empty:
+    if len(periods_m) == 0:
         if is_admin:
             st.info("📭 База пуста. Загрузите CSV-файлы для начала анализа.")
         else:
             st.warning("📭 Данных нет. Обратитесь к администратору для загрузки данных.")
         st.stop()
-
-    # Нормализация колонок для pipeline
-    if "task_identifier" not in full_raw_df.columns:
-        full_raw_df["task_identifier"] = full_raw_df["task_id"]
 
     fingerprint_started = perf_counter()
     db_fingerprint = get_db_fingerprint()
@@ -250,6 +276,21 @@ def run_streamlit_app():
         _timings=timings,
     )
     timings["pipeline"] = perf_counter() - pipeline_started
+
+    if selected_key == "dashboard":
+        dashboard_started = perf_counter()
+        with content_col:
+            render_dashboard_tab(global_summary_df, data_months=periods_m, timings=timings)
+        timings["dashboard"] = perf_counter() - dashboard_started
+        timings["total"] = perf_counter() - run_started
+        cache_status = "miss" if "pipeline_events" in timings else "hit"
+        durations = " ".join(f"{stage}_ms={seconds * 1000:.1f}" for stage, seconds in timings.items())
+        print(f"dashboard_perf cache={cache_status} {durations}", file=sys.stderr, flush=True)
+        return
+
+    # Нормализация колонок для фильтрации и вкладок
+    if "task_identifier" not in full_raw_df.columns:
+        full_raw_df["task_identifier"] = full_raw_df["task_id"]
 
     if period_mode == "Весь период":
         active_tids = global_summary_df["Задача"].dropna().unique()
@@ -273,38 +314,7 @@ def run_streamlit_app():
     reworks_df = all_reworks[all_reworks["Задача"].isin(active_tids)].copy() if not all_reworks.empty else all_reworks
     qa_wait_df = all_qa_waits[all_qa_waits["Задача"].isin(active_tids)].copy() if not all_qa_waits.empty else all_qa_waits
 
-    user_name = st.session_state.user_name
-    user_role = st.session_state.user_role
-    available_tabs = get_available_tabs(user_role)
-    tab_labels = get_tab_labels()
-
-    # Динамически создаём навигацию на основе роли
-    tabs_to_render = [tab for tab in [
-        "dashboard", "overview", "periods", "estimates", "deadlines", "types", "priorities",
-        "qa", "dev", "analytics", "detail"
-    ] if tab in available_tabs]
-
-    nav_labels = [tab_labels[t] for t in tabs_to_render]
-    nav_col, content_col = st.columns([1, 4])
-    with nav_col:
-        selected_label = st.radio(
-            "Разделы",
-            options=nav_labels,
-            key="main_nav",
-            label_visibility="collapsed",
-        )
-    selected_key = tabs_to_render[nav_labels.index(selected_label)]
-
-    if selected_key == "dashboard":
-        dashboard_started = perf_counter()
-        with content_col:
-            render_dashboard_tab(global_summary_df, full_raw_df=full_raw_df, timings=timings)
-        timings["dashboard"] = perf_counter() - dashboard_started
-        timings["total"] = perf_counter() - run_started
-        cache_status = "miss" if "pipeline_events" in timings else "hit"
-        durations = " ".join(f"{stage}_ms={seconds * 1000:.1f}" for stage, seconds in timings.items())
-        print(f"dashboard_perf cache={cache_status} {durations}", file=sys.stderr, flush=True)
-    elif summary_df.empty and selected_key != "qa":
+    if summary_df.empty and selected_key != "qa":
         with content_col:
             st.warning(f"⚠️ В выбранном периоде ({sel_label}) нет движения по статусам.")
     else:
