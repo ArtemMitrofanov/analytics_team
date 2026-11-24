@@ -1,6 +1,7 @@
 """main.py — Главная точка входа Streamlit приложения."""
 import sys
 from pathlib import Path
+from time import perf_counter
 
 # Гарантируем регистрацию путей поиска модулей
 APP_DIR = Path(__file__).resolve().parent
@@ -49,6 +50,9 @@ def validate_csv_schema(df: pd.DataFrame, filename: str) -> tuple[bool, list[str
 
 def run_streamlit_app():
     """Точка входа для Streamlit. Вызывается только при запуске через `streamlit run main.py`."""
+    run_started = perf_counter()
+    timings: dict[str, float] = {}
+
     import streamlit as st
     from db import make_file_hash, load_dataframe_to_db, is_file_loaded
 
@@ -74,7 +78,9 @@ def run_streamlit_app():
         render_theme_toggle()
 
     # Читаем все события из PostgreSQL для аналитики
+    events_started = perf_counter()
     full_raw_df = get_all_events()
+    timings["events"] = perf_counter() - events_started
 
     periods_m = sorted(full_raw_df["timestamp"].dt.to_period("M").unique())
     monthly_sprints_list = [
@@ -137,7 +143,9 @@ def run_streamlit_app():
 
         st.markdown("---")
         st.header("🗄️ База данных (PostgreSQL)")
+        stats_started = perf_counter()
         stats = get_summary_stats()
+        timings["db_stats"] = perf_counter() - stats_started
         st.metric("Загружено строк", f"{stats['total_rows']:,}")
         st.metric("Уникальных задач", f"{stats['unique_tasks']:,}")
         st.metric("Файлов загружено", f"{stats['loaded_files']:,}")
@@ -207,6 +215,10 @@ def run_streamlit_app():
     if "task_identifier" not in full_raw_df.columns:
         full_raw_df["task_identifier"] = full_raw_df["task_id"]
 
+    fingerprint_started = perf_counter()
+    db_fingerprint = get_db_fingerprint()
+    timings["db_fingerprint"] = perf_counter() - fingerprint_started
+    pipeline_started = perf_counter()
     (
         global_summary_df,
         all_qa_iters,
@@ -217,8 +229,10 @@ def run_streamlit_app():
         all_reworks,
         all_qa_waits,
     ) = process_all_tasks_cached(
-        get_db_fingerprint(), work_start_h, work_end_h, net_ratio, net_day_hours
+        db_fingerprint, work_start_h, work_end_h, net_ratio, net_day_hours,
+        _timings=timings,
     )
+    timings["pipeline"] = perf_counter() - pipeline_started
 
     if period_mode == "Весь период":
         active_tids = global_summary_df["Задача"].dropna().unique()
@@ -265,8 +279,14 @@ def run_streamlit_app():
     selected_key = tabs_to_render[nav_labels.index(selected_label)]
 
     if selected_key == "dashboard":
+        dashboard_started = perf_counter()
         with content_col:
-            render_dashboard_tab(global_summary_df, full_raw_df=full_raw_df)
+            render_dashboard_tab(global_summary_df, full_raw_df=full_raw_df, timings=timings)
+        timings["dashboard"] = perf_counter() - dashboard_started
+        timings["total"] = perf_counter() - run_started
+        cache_status = "miss" if "pipeline_events" in timings else "hit"
+        durations = " ".join(f"{stage}_ms={seconds * 1000:.1f}" for stage, seconds in timings.items())
+        print(f"dashboard_perf cache={cache_status} {durations}", file=sys.stderr, flush=True)
     elif summary_df.empty and selected_key != "qa":
         with content_col:
             st.warning(f"⚠️ В выбранном периоде ({sel_label}) нет движения по статусам.")

@@ -1,4 +1,6 @@
 """data/pipeline.py — Быстрая пакетная обработка и кэширование результатов."""
+from time import perf_counter
+
 import pandas as pd
 import streamlit as st
 from data.task_processor import process_single_task
@@ -63,19 +65,29 @@ def process_all_tasks_cached(
     work_start_h: int,
     work_end_h: int,
     net_ratio: float,
-    net_day_hours: float
+    net_day_hours: float,
+    _timings: dict[str, float] | None = None,
 ):
     """Обрабатывает все задачи из PostgreSQL. Кэш ключируется по отпечатку БД, а не по DataFrame."""
     from db import get_all_events
 
+    # Streamlit excludes underscore-prefixed arguments from the cache key.
+    # These timings are populated only when the cached function runs.
+    events_started = perf_counter()
     raw_df = get_all_events()
+    if _timings is not None:
+        _timings["pipeline_events"] = perf_counter() - events_started
     if raw_df.empty:
         return (
             pd.DataFrame(), pd.DataFrame(), pd.DataFrame(),
             pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(),
             pd.DataFrame(),
         )
-    return _process_all_tasks(raw_df, work_start_h, work_end_h, net_ratio, net_day_hours)
+    compute_started = perf_counter()
+    result = _process_all_tasks(raw_df, work_start_h, work_end_h, net_ratio, net_day_hours)
+    if _timings is not None:
+        _timings["pipeline_compute"] = perf_counter() - compute_started
+    return result
 
 
 def process_all_tasks(

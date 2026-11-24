@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from html import escape
+from time import perf_counter
 from typing import Any
 
 import pandas as pd
@@ -580,6 +581,8 @@ def render_dashboard_tab(
     summary_df: pd.DataFrame,
     full_raw_df: pd.DataFrame | None = None,
     today: Any | None = None,
+    *,
+    timings: dict[str, float] | None = None,
 ) -> None:
     """Отрисовать вкладку «Дашборд» (админская, общекомандные данные)."""
     try:
@@ -603,11 +606,14 @@ def render_dashboard_tab(
         st.info("Нет завершённых задач для построения дашборда.")
         return
 
+    monthly_started = perf_counter()
     data_months = None
     if full_raw_df is not None and not full_raw_df.empty and "timestamp" in full_raw_df.columns:
         data_months = pd.to_datetime(full_raw_df["timestamp"], errors="coerce").dt.to_period("M")
 
     monthly = build_monthly_metrics(summary_df, data_months=data_months, today=today)
+    if timings is not None:
+        timings["monthly_metrics"] = perf_counter() - monthly_started
     if monthly.empty:
         st.info("Нет завершённых задач для построения дашборда.")
         return
@@ -703,6 +709,7 @@ def render_dashboard_tab(
                     "Если точек меньше, будет показан только фактический тренд."
                 )
 
+    render_started = perf_counter()
     _render_kpis(wide, start, end)
 
     chart_title = (
@@ -749,3 +756,5 @@ def render_dashboard_tab(
             eyebrow="Подробности",
         )
         _render_drilldown(summary_df, wide, start, end)
+    if timings is not None:
+        timings["dashboard_content"] = perf_counter() - render_started
