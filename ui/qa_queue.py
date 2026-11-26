@@ -6,10 +6,10 @@ import streamlit as st
 from data.qa_queue import (
     build_queue_daily, build_queue_monthly, local_timestamp, task_texts, matching_task_ids,
 )
-from config import MONTH_NAMES_RU
+from config import DEFAULT_TEAM_ID, MONTH_NAMES_RU
 
 
-def render_qa_queue(events, start_date=None, end_date=None):
+def render_qa_queue(events, start_date=None, end_date=None, *, team_id=DEFAULT_TEAM_ID):
     st.markdown("##### Среднее количество задач в очереди «К тестированию»")
     st.caption("За день считаем уникальные задачи, ожидавшие QA хотя бы часть суток "
                "00:00–24:00. Среднее за месяц — сумма дневных значений / число "
@@ -19,26 +19,38 @@ def render_qa_queue(events, start_date=None, end_date=None):
         return
     texts = task_texts(events)
     options = sorted(texts.index)
+    valid_ids = set(options)
+
     def task_label(task_id):
         title = texts.at[task_id, "title"]
         return f"{task_id} — {title[:100]}" if title else task_id
 
+    # Streamlit очищает состояние скрытых виджетов. Храним фильтры отдельно.
+    filters = st.session_state.setdefault("qa_queue_filters", {})
+    saved = filters.get(team_id, {})
+    widget_prefix = f"qa_queue_filter_{team_id}"
+    modes = ["Без сторонних задач", "Все задачи"]
     with st.sidebar:
         st.markdown("---")
         st.subheader("Фильтр очереди QA")
-        mode = st.radio("Задачи на графике", ["Без сторонних задач", "Все задачи"],
-                        key="qa_queue_filter_mode")
+        mode = st.radio(
+            "Задачи на графике", modes, index=modes.index(saved.get("mode", modes[0])),
+            key=f"{widget_prefix}_mode",
+        )
         filtering = mode == "Без сторонних задач"
-        words = st.text_area("Исключать слова в названии или описании", value="УУ\nПД\nУС",
+        words = st.text_area("Исключать слова в названии или описании", value=saved.get("words", "УУ\nПД\nУС"),
                              help="Одно слово или фраза на строку. Совпадение целиком, без учёта регистра.",
-                             key="qa_queue_keywords", disabled=not filtering)
+                             key=f"{widget_prefix}_keywords", disabled=not filtering)
         manual = st.multiselect("Дополнительно исключить задачи", options, format_func=task_label,
-                                key="qa_queue_manual_exclude", disabled=not filtering)
+                                default=[tid for tid in saved.get("manual", []) if tid in valid_ids],
+                                key=f"{widget_prefix}_exclude", disabled=not filtering)
         keep = st.multiselect("Всегда учитывать задачи", options, format_func=task_label,
+                              default=[tid for tid in saved.get("keep", []) if tid in valid_ids],
                               help="Имеет приоритет над словами и ручным исключением.",
-                              key="qa_queue_manual_keep", disabled=not filtering)
+                              key=f"{widget_prefix}_keep", disabled=not filtering)
         st.caption("Фильтр влияет только на график очереди QA и его дневную детализацию. "
-                   "Настройки действуют в текущей сессии.")
+                   "Настройки сохраняются отдельно для каждой команды в текущей сессии.")
+    filters[team_id] = {"mode": mode, "words": words, "manual": manual, "keep": keep}
     automatic = matching_task_ids(texts, words.splitlines())
     excluded = (automatic | set(manual)) - set(keep) if filtering else set()
     st.caption(f"Режим: {mode.lower()} · Исключено задач: {len(excluded)} из {len(texts)}.")

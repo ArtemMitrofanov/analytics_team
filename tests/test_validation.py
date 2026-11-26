@@ -1,7 +1,7 @@
 """Тесты для main.py — validate_csv_schema."""
 import pandas as pd
 import pytest
-from main import validate_csv_schema
+from main import team_name_from_issue_id, validate_csv_schema
 
 
 class TestValidateCSVSchema:
@@ -103,3 +103,15 @@ class TestValidateCSVSchema:
         valid, errors = validate_csv_schema(df, "test.csv")
         assert valid is True
         assert errors == []
+
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [
+        ([None, " ", " KBAKontur-7007 ", "KBAInternal-123"], "KBAKontur"),
+        (["Project-With-Dashes-42"], "Project-With-Dashes"),
+        (["invalid", "KBAKontur-7007"], None),
+        ([], None),
+    ],
+)
+def test_team_name_from_first_nonempty_issue_id(values, expected):
+    assert team_name_from_issue_id(pd.DataFrame({"issue_id": values})) == expected

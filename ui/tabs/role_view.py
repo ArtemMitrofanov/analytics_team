@@ -2,6 +2,7 @@
 from typing import List, Optional
 import pandas as pd
 import streamlit as st
+from config import DEFAULT_TEAM_ID
 from utils.stats import calc_stats
 from ui.components import render_searchable_log
 from data.metrics import recompute_role_period_metrics
@@ -58,6 +59,7 @@ def render_role_tab(
     rev_col: Optional[str] = None,
     global_summary_df: pd.DataFrame = None,
     queue_events: pd.DataFrame = None,
+    queue_team_id: str = DEFAULT_TEAM_ID,
 ):
     period_active = start_date is not None and end_date is not None
 
@@ -118,7 +120,7 @@ def render_role_tab(
         if role_key == "qa":
             from ui.qa_queue import render_qa_queue
 
-            render_qa_queue(queue_events, start_date, end_date)
+            render_qa_queue(queue_events, start_date, end_date, team_id=queue_team_id)
             st.markdown("---")
         st.markdown("##### Сводная таблица по задачам (в днях)")
         if wait_col and rev_col and rev_col in summary_p.columns:

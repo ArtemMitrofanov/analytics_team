@@ -12,6 +12,7 @@ from config import (
     STATUS_DEV_REVIEW,
     STATUS_QA_WORK,
 )
+from data.workflow import FINANCE_ACTIVE_STATUSES, FINANCE_EXTRA_STATUSES, RELEASED_AT
 from ui.bento import active_theme_mode, bento_palette, render_plotly
 from utils.stats import calc_stats
 
@@ -20,7 +21,9 @@ def render_overview_tab(
     summary_df: pd.DataFrame,
     net_day_hours: float = 7.0
 ):
-    st.subheader("🌐 Сквозная воронка поставки (Аналитика → Разработка → QA)")
+    finance = RELEASED_AT in summary_df.columns
+    title = "Аналитика → Проектирование → Разработка → QA" if finance else "Аналитика → Разработка → QA"
+    st.subheader(f"🌐 Сквозная воронка поставки ({title})")
     palette = bento_palette(active_theme_mode())
     mean_lead, med_lead, p85_lead, _ = calc_stats(summary_df.get("Полный Lead Time (д.)", pd.Series(dtype=float)))
     mean_wait, med_wait, p85_wait, _ = calc_stats(summary_df.get("Всего очередей (д.)", pd.Series(dtype=float)))
@@ -36,7 +39,8 @@ def render_overview_tab(
     st.markdown("---")
     st.subheader("Детализация среднего времени по каждому статусу (в днях)")
     status_stats = []
-    for st_name in ALL_TRACKED_STATUSES:
+    statuses = [*ALL_TRACKED_STATUSES, *FINANCE_EXTRA_STATUSES] if finance else ALL_TRACKED_STATUSES
+    for st_name in statuses:
         col = f"{st_name} (д.)"
         s = summary_df.get(col, pd.Series(dtype=float))
         mean_v, med_v, p85_v, cnt_v = calc_stats(s)
@@ -45,7 +49,12 @@ def render_overview_tab(
             if st_name in STATUS_ANALYTICS_WAIT + STATUS_ANALYTICS_WORK + STATUS_ANALYTICS_REVIEW
             else ("Разработка" if st_name in STATUS_DEV_WAIT + STATUS_DEV_WORK + STATUS_DEV_REVIEW else "Тестирование")
         )
-        cat = "Работа" if st_name in STATUS_ANALYTICS_WORK + STATUS_DEV_WORK + STATUS_QA_WORK else "Очередь / Ревью"
+        if st_name in FINANCE_EXTRA_STATUSES:
+            phase = "Проектирование" if "проектирован" in st_name.casefold() else "Подготовка и ожидание"
+        cat = (
+            "Работа" if st_name in STATUS_ANALYTICS_WORK + STATUS_DEV_WORK + STATUS_QA_WORK
+            or st_name in FINANCE_ACTIVE_STATUSES else "Очередь / Ревью"
+        )
         status_stats.append({
             "Этап": phase,
             "Тип": cat,

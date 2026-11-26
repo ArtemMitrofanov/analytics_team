@@ -1,0 +1,12 @@
+{
+  "msfo": {
+    "name": "МСФО",
+    "project": "KBAKontur",
+    "subsystem": "МСФО. п00272"
+  },
+  "modernization": {
+    "name": "Модернизация",
+    "project": "KBAKontur",
+    "subsystem": "Модернизация. п00277"
+  }
+}

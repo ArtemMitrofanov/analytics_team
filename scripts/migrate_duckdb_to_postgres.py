@@ -98,16 +98,13 @@ def main() -> int:
     source.close()
     df = normalize(df)
 
-    statements = [
-        statement.strip()
-        for statement in SCHEMA_PATH.read_text(encoding="utf-8").split(";")
-        if statement.strip()
-    ]
     with psycopg.connect(args.dsn) as conn:
         with conn.cursor() as cur:
-            for statement in statements:
-                cur.execute(statement)
-            before = cur.execute("SELECT COUNT(*) FROM task_events").fetchone()[0]
+            cur.execute(
+                "SELECT pg_advisory_xact_lock(hashtext('team_process_analytics_schema')::bigint)"
+            )
+            cur.execute(SCHEMA_PATH.read_text(encoding="utf-8"))
+            before = cur.execute("SELECT COUNT(*) FROM task_events WHERE team_id = 'default'").fetchone()[0]
             cur.execute(
                 "CREATE TEMP TABLE _task_events_staging ON COMMIT DROP "
                 "AS SELECT * FROM task_events WITH NO DATA"
@@ -128,12 +125,12 @@ def main() -> int:
                 f"""
                 INSERT INTO task_events ({copy_columns})
                 SELECT {copy_columns} FROM _task_events_staging
-                ON CONFLICT (row_hash) DO NOTHING
+                ON CONFLICT (team_id, row_hash) DO NOTHING
                 RETURNING 1
                 """
             )
             inserted = len(cur.fetchall())
-            total = cur.execute("SELECT COUNT(*) FROM task_events").fetchone()[0]
+            total = cur.execute("SELECT COUNT(*) FROM task_events WHERE team_id = 'default'").fetchone()[0]
 
     print(f"Строк в DuckDB: {source_count}")
     print(f"Строк в PostgreSQL до миграции: {before}")

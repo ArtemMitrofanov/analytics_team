@@ -7,6 +7,7 @@ import xml.etree.ElementTree as ET
 import pandas as pd
 
 from data.task_processor import clean_val
+from data.workflow import FINANCE_PROJECT, FINANCE_STATUS_MAP, status_event_mask
 
 CALENDAR_DIR = Path(__file__).resolve().parents[1] / "config/production_calendar"
 
@@ -61,15 +62,17 @@ def build_queue_daily(events: pd.DataFrame, complete_through, start_date=None,
     days = pd.date_range(first, cutoff - pd.Timedelta(days=1), freq="D")
     days = pd.DatetimeIndex([d for d in days if is_workday(d)])
     counts = pd.Series(0, index=days, dtype="int64")
-    statuses = history[history["changed_value"].isin(["Текущий статус", "State"])]
+    task_col = "task_identifier" if "task_identifier" in history else "task_id"
+    finance = history[task_col].astype("string").str.startswith(f"{FINANCE_PROJECT}-", na=False)
+    statuses = history[status_event_mask(history)]
     # В выгрузке закрытие иногда записано отдельным событием без смены статуса.
     if "activity_type" in history:
-        resolved = history[history["activity_type"] == "IssueResolvedActivityItem"].copy()
+        resolved = history[history["activity_type"].eq("IssueResolvedActivityItem") & ~finance].copy()
         resolved["added_values"] = ""
         statuses = pd.concat([statuses, resolved], ignore_index=True)
-    task_col = "task_identifier" if "task_identifier" in statuses else "task_id"
     excluded = {str(task_id) for task_id in excluded_task_ids}
     for task_id, task in statuses.groupby(task_col, sort=False):
+        finance_task = str(task_id).rpartition("-")[0] == FINANCE_PROJECT
         if str(task_id) in excluded:
             continue
         task = task.sort_values("timestamp", kind="stable").drop_duplicates(
@@ -78,7 +81,10 @@ def build_queue_daily(events: pd.DataFrame, complete_through, start_date=None,
         ends = starts[1:] + [cutoff]
         seen = pd.Series(False, index=days)
         for status, begin, finish in zip(task["added_values"], starts, ends):
-            if clean_val(status) == "К тестированию" and finish > begin:
+            label = clean_val(status)
+            if finance_task:
+                label = FINANCE_STATUS_MAP.get(label.casefold(), label)
+            if label == "К тестированию" and finish > begin:
                 seen |= (days < finish) & (days + pd.Timedelta(days=1) > begin)
         counts += seen.astype("int64")
     return pd.DataFrame({"date": days, "tasks": counts.to_numpy()})

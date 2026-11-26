@@ -2,7 +2,7 @@
 import pandas as pd
 import plotly.express as px
 import streamlit as st
-from config import TSHIRT_ORDER, CORE_QA_TEAM, CORE_DEV_TEAM, CORE_ANALYTICS_TEAM
+from config import DEFAULT_TEAM_ID, TEAMS, TSHIRT_ORDER, Team
 from ui.bento import active_theme_mode, bento_palette, render_plotly
 from utils.stats import calc_stats
 
@@ -11,8 +11,21 @@ def render_estimates_tab(
     summary_df: pd.DataFrame,
     qa_iter_df: pd.DataFrame,
     dev_iter_df: pd.DataFrame,
-    an_iter_df: pd.DataFrame
+    an_iter_df: pd.DataFrame,
+    *,
+    team: Team = TEAMS[DEFAULT_TEAM_ID],
+    overall_only: bool = False,
 ):
+    if overall_only:
+        st.subheader("Оценка задач")
+        st.caption("Размер задачи берётся из поля Size при создании задачи.")
+        st.dataframe(
+            summary_df[["Задача", "task_size"]].rename(columns={"task_size": "Размер задачи"}),
+            use_container_width=True,
+            hide_index=True,
+        )
+        return
+
     st.subheader("🎯 Анализ точности и калибровка оценок задач")
     st.caption("Сопоставление плановых и фактических размеров (XS, S, M, L, XL) и калибровка фактическими рабочими днями")
 
@@ -56,7 +69,7 @@ def render_estimates_tab(
         "📐 Аналитика",
     ])
 
-    def render_calibration(role_name: str, plan_col: str, fact_col: str, days_col: str, data: pd.DataFrame, iter_df: pd.DataFrame = None, core_team: list = None, actor_col: str = "Исполнитель"):
+    def render_calibration(role_name: str, plan_col: str, fact_col: str, days_col: str, data: pd.DataFrame, iter_df: pd.DataFrame = None, core_team: tuple[str, ...] | None = None, actor_col: str = "Исполнитель"):
         col_tbl, col_chart = st.columns([1, 1])
         cal_rows = []
         for sz in TSHIRT_ORDER:
@@ -135,13 +148,13 @@ def render_estimates_tab(
                 st.info(f"Нет данных по фактическим оценкам для текущего периода.")
 
     with est_role_qa:
-        render_calibration("QA", "qa_plan", "qa_fact", "В тестировании (дни)", est_df, qa_iter_df, CORE_QA_TEAM, "Исполнитель")
+        render_calibration("QA", "qa_plan", "qa_fact", "В тестировании (дни)", est_df, qa_iter_df, team.qa, "Исполнитель")
 
     with est_role_dev:
-        render_calibration("Разработки", "dev_plan", "dev_fact", "В разработке (д.)", est_df, dev_iter_df, CORE_DEV_TEAM, "Разработчик")
+        render_calibration("Разработки", "dev_plan", "dev_fact", "В разработке (д.)", est_df, dev_iter_df, team.dev, "Разработчик")
 
     with est_role_an:
-        render_calibration("Аналитики", "an_plan", "an_fact", "В аналитике (д.)", est_df, an_iter_df, CORE_ANALYTICS_TEAM, "Аналитик")
+        render_calibration("Аналитики", "an_plan", "an_fact", "В аналитике (д.)", est_df, an_iter_df, team.analytics, "Аналитик")
 
     st.markdown("---")
     st.markdown("#### 2. Реестр оценок по задачам")

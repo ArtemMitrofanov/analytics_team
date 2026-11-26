@@ -5,7 +5,10 @@ import hashlib
 import hmac
 import json
 import os
+import re
 from pathlib import Path
+
+from config import DEFAULT_TEAM_ID, TEAMS
 
 Role = Literal["admin", "guest", "analyst", "developer", "tester"]
 
@@ -14,6 +17,7 @@ def _hash(password: str) -> str:
 
 ALL_TABS = [
     "dashboard",     # 📈 Дашборд (только admin, общекомандные данные)
+    "comparison",
     "overview",      # 🌐 Общая информация
     "periods",       # 📅 Динамика по периодам
     "estimates",     # 🎯 Оценка задач
@@ -36,6 +40,7 @@ ROLE_TABS: dict[Role, list[str]] = {
 
 TAB_LABELS = {
     "dashboard": "Дашборд",
+    "comparison": "Сравнение команд",
     "overview": "Общая информация",
     "periods": "Динамика по периодам",
     "estimates": "Оценка задач",
@@ -87,6 +92,11 @@ if os.environ.get("ANALYTICS_USERS_FILE"):
             not isinstance(username, str)
             or not isinstance(user, dict)
             or user.get("role") not in ROLE_TABS
+            or not isinstance(user.get("teams", []), list)
+            or not all(
+                isinstance(team_id, str) and re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,63}", team_id)
+                for team_id in user.get("teams", [])
+            )
             or not isinstance(user.get("display_name"), str)
             or not isinstance(user.get("password_hash"), str)
             or len(user["password_hash"]) != 64
@@ -101,6 +111,16 @@ USERNAMES = list(USERS.keys())
 def get_user_role(username: str) -> Role:
     """Возвращает роль пользователя по имени."""
     return USERS.get(username, {}).get("role", "guest")
+
+
+def get_available_team_ids(username: str, teams=TEAMS) -> list[str]:
+    user = USERS.get(username)
+    if user is None:
+        return []
+    if user["role"] == "admin":
+        return list(teams)
+    allowed = user.get("teams", [DEFAULT_TEAM_ID])
+    return [team_id for team_id in teams if team_id in allowed]
 
 
 def get_available_tabs(role: Role) -> list[str]:

@@ -20,6 +20,7 @@ from data.monthly_metrics import (
     get_metric_specs,
     pivot_monthly_metrics,
 )
+from data.workflow import READY_AT, RELEASED_AT, RELEASE_WAIT
 from ui.bento import (
     active_theme_mode,
     bento_palette,
@@ -577,6 +578,40 @@ def _render_drilldown(
     )
 
 
+def _render_finance_release_table(summary: pd.DataFrame, start=None, end=None) -> None:
+    with st.container():
+        glass_panel_marker()
+        render_section_header(
+            "Релизы Finance",
+            "Готовность относится к месяцу перехода в «К релизу». "
+            "Ожидание выкладки — к месяцу фактического релиза.",
+        )
+        ready = pd.to_datetime(summary[READY_AT], errors="coerce").dt.to_period("M")
+        released = pd.to_datetime(summary[RELEASED_AT], errors="coerce").dt.to_period("M")
+        waiting = pd.to_numeric(summary[RELEASE_WAIT], errors="coerce")
+        months = sorted(set(ready.dropna()) | set(released.dropna()))
+        if start is not None:
+            months = pd.period_range(start, end, freq="M")
+        if not len(months):
+            st.info("Нет переходов в «К релизу» или «Зарелизили».")
+            return
+
+        rows = []
+        for month in months:
+            shipped = released.eq(month)
+            rows.append({
+                "Месяц": format_month(month.start_time),
+                "Готово к релизу": int(ready.eq(month).sum()),
+                "Зарелизили": int(shipped.sum()),
+                "Среднее ожидание релиза, раб. д.": waiting[shipped].mean(),
+                "Релизов с датой готовности": int(waiting[shipped].count()),
+            })
+        st.dataframe(
+            pd.DataFrame(rows), use_container_width=True, hide_index=True,
+            column_config={"Среднее ожидание релиза, раб. д.": st.column_config.NumberColumn(format="%.2f")},
+        )
+
+
 def render_dashboard_tab(
     summary_df: pd.DataFrame,
     full_raw_df: pd.DataFrame | None = None,
@@ -612,10 +647,13 @@ def render_dashboard_tab(
         event_months = pd.to_datetime(full_raw_df["timestamp"], errors="coerce").dt.to_period("M")
         data_months = event_months.dropna().unique()
 
+    finance_workflow = RELEASED_AT in summary_df.columns
     monthly = build_monthly_metrics(summary_df, data_months=data_months, today=today)
     if timings is not None:
         timings["monthly_metrics"] = perf_counter() - monthly_started
     if monthly.empty:
+        if finance_workflow:
+            _render_finance_release_table(summary_df)
         st.info("Нет завершённых задач для построения дашборда.")
         return
 
@@ -730,6 +768,9 @@ def render_dashboard_tab(
             result = _render_main_chart(wide, selected_spec, start, end, horizon)
     with signal_col:
         _render_signal_panel(wide, selected_spec, start, end, horizon, result)
+
+    if finance_workflow:
+        _render_finance_release_table(summary_df, start, end)
 
     with st.container():
         glass_panel_marker()

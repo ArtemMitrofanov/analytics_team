@@ -1,17 +1,28 @@
 """tests/test_db.py — тесты PostgreSQL: загрузка, дедупликация по row_hash и file_hash."""
+from uuid import uuid4
+
 import pandas as pd
 import pytest
 
+import db
+from config import Team, team_display_label
+
 from db import (
+    WrongTeamImport,
     clear_database,
+    create_team,
+    delete_team,
     get_all_events,
     get_db_fingerprint,
     get_events_for_tasks,
     get_summary_stats,
+    get_team_display_names,
+    get_teams,
     is_file_loaded,
     load_dataframe_to_db,
     make_file_hash,
     make_row_hash,
+    rename_team,
 )
 
 
@@ -331,3 +342,141 @@ class TestClearDatabase:
         assert stats["total_rows"] == 0
         assert stats["unique_tasks"] == 0
         assert stats["loaded_files"] == 0
+
+
+def test_team_isolation_for_identical_imports():
+    team_id = "second-team"
+    frame = pd.DataFrame({
+        "task_id": ["TASK-1"],
+        "timestamp": ["2024-01-15 10:00"],
+        "changed_value": ["State"],
+    })
+    default_fingerprint = get_db_fingerprint()
+    try:
+        assert load_dataframe_to_db(frame, "tasks.csv", "same-file", team_id=team_id) == 1
+        assert load_dataframe_to_db(frame, "tasks.csv", "same-file", team_id=team_id) == 0
+        assert is_file_loaded("same-file", team_id=team_id)
+        assert not is_file_loaded("same-file")
+        assert get_db_fingerprint() == default_fingerprint
+        assert get_all_events().empty
+
+        assert load_dataframe_to_db(frame, "tasks.csv", "same-file") == 1
+        assert get_summary_stats()["total_rows"] == 1
+        assert get_summary_stats(team_id=team_id)["total_rows"] == 1
+        assert get_events_for_tasks(["TASK-1"], team_id=team_id)["team_id"].tolist() == [team_id]
+        clear_database(team_id=team_id)
+        assert get_summary_stats(team_id=team_id)["total_rows"] == 0
+        assert get_summary_stats()["total_rows"] == 1
+    finally:
+        clear_database(team_id=team_id)
+
+
+def test_import_rejects_wrong_team_before_writing_events():
+    primary = "import-validation-primary"
+    secondary = "import-validation-secondary"
+    unassigned = "import-validation-unassigned"
+    primary_rows = pd.DataFrame({
+        "issue_id": ["ImportPrimary-1"],
+        "timestamp": ["2024-01-15 10:00"],
+        "changed_value": ["State"],
+    })
+    secondary_rows = primary_rows.assign(issue_id="ImportSecondary-2")
+    try:
+        assert load_dataframe_to_db(
+            primary_rows, "primary.csv", "primary-file", team_id=primary, team_name="ImportPrimary",
+        ) == 1
+        with pytest.raises(WrongTeamImport, match="выбрана «ImportPrimary»"):
+            load_dataframe_to_db(
+                secondary_rows, "secondary.csv", "secondary-file",
+                team_id=primary, team_name="ImportSecondary",
+            )
+        with pytest.raises(WrongTeamImport, match="уже принадлежит другой команде"):
+            load_dataframe_to_db(
+                primary_rows, "primary.csv", "primary-file",
+                team_id=unassigned, team_name="ImportPrimary",
+            )
+        assert get_all_events(team_id=primary)["task_id"].tolist() == ["ImportPrimary-1"]
+        assert not is_file_loaded("secondary-file", team_id=primary)
+        assert get_all_events(team_id=unassigned).empty
+
+        assert load_dataframe_to_db(
+            secondary_rows, "secondary.csv", "secondary-file",
+            team_id=secondary, team_name="ImportSecondary",
+        ) == 1
+        assert get_team_display_names([primary, secondary, unassigned]) == {
+            primary: "ImportPrimary", secondary: "ImportSecondary",
+        }
+    finally:
+        clear_database(team_id=primary)
+        clear_database(team_id=secondary)
+
+
+def test_admin_can_create_team_with_reserved_import_scope():
+    project = f"WebTest-{uuid4().hex}"
+    with pytest.raises(PermissionError, match="администратор"):
+        create_team("guest", "Forbidden", project)
+
+    team_id = create_team("admin", "Своя команда", project)
+    assert get_teams()[team_id].name == "Своя команда"
+    with pytest.raises(ValueError, match="уже существует"):
+        create_team("admin", "Дубликат", project)
+
+    scoped_id = create_team("admin", "Подсистема", project, "Подпроект")
+    frame = pd.DataFrame({
+        "issue_id": [f"{project}-1"],
+        "timestamp": ["2024-01-15 10:00"],
+        "changed_value": ["Subsystem"],
+        "added_values": ["['Подпроект']"],
+    })
+    try:
+        with pytest.raises(WrongTeamImport, match="Подсистема"):
+            load_dataframe_to_db(frame, "test.csv", "scope-test", team_id=team_id, team_name=project)
+        assert load_dataframe_to_db(
+            frame, "test.csv", "scope-test", team_id=scoped_id, team_name=project,
+        ) == 1
+        plain = frame.assign(changed_value="State", added_values="В разработке")
+        with pytest.raises(WrongTeamImport, match="ожидается префикс"):
+            load_dataframe_to_db(plain, "test.csv", "project-test", team_id=team_id, team_name="Other")
+        assert load_dataframe_to_db(
+            plain, "test.csv", "project-test", team_id=team_id, team_name=project,
+        ) == 1
+    finally:
+        clear_database(team_id=team_id)
+        clear_database(team_id=scoped_id)
+
+
+@pytest.mark.parametrize("configured", [False, True])
+def test_rename_preserves_identity_and_delete_removes_only_team_data(configured, monkeypatch):
+    project = f"ManageTest-{uuid4().hex}"
+    subsystem = "Подпроект"
+    if configured:
+        team_id = f"configured-{uuid4().hex}"
+        monkeypatch.setitem(db.TEAMS, team_id, Team("Исходная", project=project, subsystem=subsystem))
+    else:
+        team_id = create_team("admin", "Исходная", project, subsystem)
+
+    source = pd.DataFrame({
+        "issue_id": [f"{project}-1"],
+        "timestamp": ["2024-01-15 10:00"],
+        "changed_value": ["Subsystem"],
+        "added_values": ["['Подпроект']"],
+    })
+    assert load_dataframe_to_db(source, "managed.csv", "managed", team_id=team_id, team_name=project) == 1
+    assert load_dataframe_to_db(source, "other.csv", "other") == 1
+    with pytest.raises(PermissionError):
+        rename_team("guest", team_id, "Нет доступа")
+    with pytest.raises(PermissionError):
+        delete_team("guest", team_id)
+
+    rename_team("admin", team_id, "Новое имя")
+    team = get_teams()[team_id]
+    assert (team_display_label(team), team.project, team.subsystem) == ("Новое имя", project, subsystem)
+    assert get_summary_stats(team_id=team_id)["total_rows"] == 1
+
+    assert delete_team("admin", team_id) == 1
+    db.close_pool()
+    assert team_id not in get_teams()
+    assert get_summary_stats(team_id=team_id)["total_rows"] == 0
+    assert get_summary_stats()["total_rows"] == 1
+    with pytest.raises(WrongTeamImport, match="уже удалена"):
+        load_dataframe_to_db(source, "managed.csv", "managed", team_id=team_id, team_name=project)
