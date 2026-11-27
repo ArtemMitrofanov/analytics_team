@@ -31,6 +31,8 @@ def _process_all_tasks(
     net_day_hours: float,
     *,
     core_qa: tuple[str, ...] = tuple(CORE_QA_TEAM),
+    first_task_size: bool = False,
+    msfo_release: bool = False,
 ):
     """Группирует датафрейм один раз и обрабатывает задачи за один проход без повторного сканирования."""
     if "task_identifier" not in raw_df.columns:
@@ -55,7 +57,8 @@ def _process_all_tasks(
             reworks,
             qa_wait_iters,
         ) = process_single_task(
-            str(tid), sub_df, work_start_h, work_end_h, net_ratio, net_day_hours, core_qa=core_qa
+            str(tid), sub_df, work_start_h, work_end_h, net_ratio, net_day_hours,
+            core_qa=core_qa, first_task_size=first_task_size, msfo_release=msfo_release,
         )
         tasks_summaries.append(s_data)
         qa_iterations.extend(qa_iters)
@@ -90,6 +93,8 @@ def process_all_tasks_cached(
     database_key: str,
     team_id: str = DEFAULT_TEAM_ID,
     core_qa: tuple[str, ...] = tuple(CORE_QA_TEAM),
+    first_task_size: bool = False,
+    msfo_release: bool = False,
     _timings: dict[str, float] | None = None,
 ):
     """Кэширует расчёт по версии кода, базе, отпечатку данных и рабочим часам."""
@@ -109,7 +114,8 @@ def process_all_tasks_cached(
         )
     compute_started = perf_counter()
     result = _process_all_tasks(
-        raw_df, work_start_h, work_end_h, net_ratio, net_day_hours, core_qa=core_qa
+        raw_df, work_start_h, work_end_h, net_ratio, net_day_hours,
+        core_qa=core_qa, first_task_size=first_task_size, msfo_release=msfo_release,
     )
     if _timings is not None:
         _timings["pipeline_compute"] = perf_counter() - compute_started

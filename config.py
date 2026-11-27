@@ -69,6 +69,20 @@ class Team:
     display_name: str | None = None
 
 
+def is_msfo_team(team: Team) -> bool:
+    return (
+        team.project == CREATION_SIZE_PROJECT
+        and team.subsystem.strip().rstrip(".").casefold() == "мсфо. п00272"
+    )
+
+
+def uses_first_task_size(team: Team) -> bool:
+    return (
+        team.project == CREATION_SIZE_PROJECT
+        and team.subsystem.strip().rstrip(".").casefold() in {"мсфо. п00272", "модернизация. п00277"}
+    )
+
+
 def team_display_label(team: Team, imported_project: str | None = None) -> str:
     if team.display_name is not None:
         return team.display_name

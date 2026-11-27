@@ -7,6 +7,36 @@ from ui.bento import active_theme_mode, bento_palette, render_plotly
 from utils.stats import calc_stats
 
 
+def _render_overall_calibration(summary_df: pd.DataFrame) -> None:
+    st.markdown("#### Калибровка T-Shirt размеров фактическими днями")
+    st.caption(
+        "Ориентиры для всей задачи по первой оценке Size. Суммируем рабочие дни "
+        "активной аналитики, разработки и тестирования по завершённым задачам."
+    )
+    completed = summary_df.loc[summary_df["finished_at"].notna()]
+    rows = []
+    for size in TSHIRT_ORDER:
+        work = completed.loc[completed["task_size"].eq(size), "Чистая работа (д.)"]
+        mean, median, p85, count = calc_stats(work)
+        rows.append({
+            "Размер": size,
+            "Задач в расчёте": count,
+            "Среднее (д.)": mean if count else None,
+            "P50 (д.)": median if count else None,
+            "P85 (д.)": p85 if count else None,
+        })
+    if not any(row["Задач в расчёте"] for row in rows):
+        st.info("За выбранный период нет завершённых задач с оценкой XS–XL и измеренным временем работы.")
+        return
+    st.dataframe(
+        pd.DataFrame(rows), use_container_width=True, hide_index=True,
+        column_config={
+            column: st.column_config.NumberColumn(format="%.2f")
+            for column in ("Среднее (д.)", "P50 (д.)", "P85 (д.)")
+        },
+    )
+
+
 def render_estimates_tab(
     summary_df: pd.DataFrame,
     qa_iter_df: pd.DataFrame,
@@ -18,9 +48,16 @@ def render_estimates_tab(
 ):
     if overall_only:
         st.subheader("Оценка задач")
-        st.caption("Размер задачи берётся из поля Size при создании задачи.")
+        columns = {"task_size": "Размер задачи"}
+        if "task_size_changes" in summary_df.columns:
+            columns = {"task_size": "Первая оценка", "task_size_changes": "Изменений оценки"}
+            _render_overall_calibration(summary_df)
+            st.markdown("#### Реестр оценок по задачам")
+            st.caption("Основная оценка — первое непустое значение Size. В счётчик входят смены размера.")
+        else:
+            st.caption("Размер задачи берётся из поля Size при создании задачи.")
         st.dataframe(
-            summary_df[["Задача", "task_size"]].rename(columns={"task_size": "Размер задачи"}),
+            summary_df[["Задача", *columns]].rename(columns=columns),
             use_container_width=True,
             hide_index=True,
         )

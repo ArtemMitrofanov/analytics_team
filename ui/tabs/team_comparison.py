@@ -47,15 +47,15 @@ def render_team_comparison(
         st.info("Выберите начало и конец периода.")
         return
     start, end = period
-    t_shirt = st.radio("Шкала оценки", ["XS–XL", "Числовая"], horizontal=True) == "XS–XL"
-    estimate_unit = "XS=1, S=2, M=3, L=4, XL=5" if t_shirt else "числовая шкала из трекера"
     st.caption(
         "Время указано в рабочих днях по единому графику 09:00–18:00 с вычетом 2 часов. "
         "Готовность к релизу — первый переход в «К релизу». Для Бюджетирования "
         "также учитываются «Протестировано (к релизу)» и «Готово к переносу (релиз)». "
+        "Для МСФО учитываются выход из «Протестировано» без возврата в разработку "
+        "и прямой переход из «В тестировании» в «Сдача-Приёмка» или «Завершено». "
         "Lead Time — от первого входа в «К аналитике» или «В аналитике» до готовности к релизу. "
         "Cycle Time — от первого активного этапа до готовности к релизу. "
-        f"Шкала средней оценки: {estimate_unit}."
+        "Шкала средней оценки: XS=1, S=2, M=3, L=4, XL=5."
     )
 
     table_rows = []
@@ -67,7 +67,7 @@ def render_team_comparison(
         summary = get_summary(team_id) if stats[team_id]["total_rows"] else pd.DataFrame()
         completed[team_id] = completed_in_period(summary, start, end)
         coverage[team_id] = {pd.Period(month, freq="M") for month in get_months(team_id)}
-        values = comparison_values(completed[team_id], t_shirt=t_shirt)
+        values = comparison_values(completed[team_id])
         row = {metric: value for metric, (value, _) in values.items()}
         if not coverage[team_id].intersection(period_months) and completed[team_id].empty:
             row[COUNT_METRIC] = None
@@ -94,7 +94,7 @@ def render_team_comparison(
         for month in period_months:
             if month in by_month or (metric == COUNT_METRIC and month in coverage[team_id]):
                 value, n = comparison_values(
-                    by_month.get(month, pd.DataFrame()), t_shirt=t_shirt
+                    by_month.get(month, pd.DataFrame())
                 )[metric]
             else:
                 value, n = None, 0

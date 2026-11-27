@@ -12,10 +12,10 @@ def test_comparison_counts_zero_when_no_tasks_reached_release_in_period():
     summary = pd.DataFrame({READY_AT: [None, "2025-12-31"], "Задача": ["A-1", "A-2"]})
     tasks = completed_in_period(summary, date(2026, 1, 1), date(2026, 11, 26))
     assert tasks.empty
-    assert comparison_values(tasks, t_shirt=True)["Завершено задач"] == (0, 0)
+    assert comparison_values(tasks)["Завершено задач"] == (0, 0)
 
 
-def test_comparison_metrics_use_completed_tasks_and_separate_estimate_scales():
+def test_comparison_metrics_use_completed_tasks_and_xs_to_xl_estimates():
     events = pd.DataFrame(
         [
             ("T-1", "2024-02-05 09:00", "State", "К аналитике"),
@@ -36,7 +36,7 @@ def test_comparison_metrics_use_completed_tasks_and_separate_estimate_scales():
     summary, *_ = process_all_tasks(events, 9, 18, 7 / 9, 7)
     tasks = completed_in_period(summary, date(2024, 2, 9), date(2024, 2, 9))
 
-    values = comparison_values(tasks, t_shirt=True)
+    values = comparison_values(tasks)
     assert values == {
         "Завершено задач": (2, 2),
         "Lead Time, среднее": (pytest.approx(4), 1),
@@ -46,7 +46,6 @@ def test_comparison_metrics_use_completed_tasks_and_separate_estimate_scales():
         "Cycle Time, среднее": (pytest.approx(2.5), 2),
         "Средняя оценка задачи": (3, 1),
     }
-    assert comparison_values(tasks, t_shirt=False)["Средняя оценка задачи"] == (8.5, 1)
 
 
 def test_team_comparison_uses_each_projects_overall_estimate_field():
@@ -76,8 +75,8 @@ def test_team_comparison_uses_each_projects_overall_estimate_field():
     tasks = completed_in_period(summary, date(2024, 2, 7), date(2024, 2, 7))
     kontur = tasks[tasks["Задача"].str.startswith("KBAKontur-")]
     internal = tasks[tasks["Задача"].str.startswith("KBAInternal-")]
-    assert comparison_values(kontur, t_shirt=True)["Средняя оценка задачи"] == (2, 1)
-    assert comparison_values(internal, t_shirt=True)["Средняя оценка задачи"] == (4, 2)
+    assert comparison_values(kontur)["Средняя оценка задачи"] == (2, 1)
+    assert comparison_values(internal)["Средняя оценка задачи"] == (4, 2)
 
 
 def test_finance_stage_history_uses_ready_for_release_and_shows_actual_release_separately():
@@ -113,7 +112,7 @@ def test_finance_stage_history_uses_ready_for_release_and_shows_actual_release_s
     assert finance_task["Бэклог на квартал (д.)"] == 2
     tasks = completed_in_period(summary, date(2024, 2, 1), date(2024, 2, 29))
     assert tasks["Задача"].tolist() == ["Finance-1", "Finance-2"]
-    values = comparison_values(tasks, t_shirt=True)
+    values = comparison_values(tasks)
     assert values["Lead Time, среднее"] == (7, 1)
     assert values["Cycle Time, среднее"] == (3.5, 2)
     assert values["Аналитика, среднее"] == (1, 1)
@@ -137,4 +136,67 @@ def test_budget_ready_aliases_count_each_task_once_at_the_first_transition():
     january = completed_in_period(summary, date(2026, 1, 1), date(2026, 1, 31))
     assert january["Задача"].tolist() == ["KBABudg-1", "KBA-Budg-2"]
     assert completed_in_period(summary, date(2026, 2, 1), date(2026, 2, 28)).empty
-    assert comparison_values(january, t_shirt=True)["Lead Time, среднее"] == (1, 2)
+    assert comparison_values(january)["Lead Time, среднее"] == (1, 2)
+
+
+def test_msfo_and_modernization_use_first_nonempty_size_and_track_changes():
+    from config import Team, uses_first_task_size
+    from data.task_processor import extract_task_estimates
+
+    msfo = Team("Другое отображаемое имя", project="KBAKontur", subsystem="МСФО. п00272")
+    modernization = Team("Модернизация", project="KBAKontur", subsystem="Модернизация. п00277")
+    other = Team("Другая команда", project="KBAKontur", subsystem="Другая подсистема")
+    history = pd.DataFrame(
+        [
+            ("2026-03-01", "['M']", "CustomFieldActivityItem"),
+            ("2026-01-01", "[]", "IssueCreatedActivityItem"),
+            ("2026-01-05", "['S']", "CustomFieldActivityItem"),
+            ("2026-01-06", "['s']", "CustomFieldActivityItem"),
+            ("2026-02-01", "[]", "CustomFieldActivityItem"),
+            ("2026-03-02", "['S']", "CustomFieldActivityItem"),
+        ],
+        columns=["timestamp", "added_values", "activity_type"],
+    ).assign(changed_value="Size")
+    for team in (msfo, modernization):
+        result = extract_task_estimates(
+            history, project=team.project, first_task_size=uses_first_task_size(team),
+        )
+        assert result["task_size"] == "S"
+        assert result["task_size_changes"] == 2
+    other_result = extract_task_estimates(
+        history, project=other.project, first_task_size=uses_first_task_size(other),
+    )
+    assert other_result["task_size"] == ""
+    assert "task_size_changes" not in other_result
+
+
+def test_msfo_release_rule_ignores_returns_from_tested_to_development():
+    from data.task_processor import process_single_task
+
+    events = pd.DataFrame(
+        [
+            ("2026-01-12 09:00", "", "К аналитике"),
+            ("2026-01-13 09:00", "Протестировано", "В разработке"),
+            ("2026-01-14 09:00", "Протестировано", "К разработке"),
+            ("2026-01-15 09:00", "В тестировании", "Сдача-Приёмка"),
+            ("2026-01-16 09:00", "Сдача-Приёмка", "К релизу"),
+        ],
+        columns=["timestamp", "removed_values", "added_values"],
+    ).assign(changed_value="State", activity_type="", author_full_name="")
+
+    def evaluate(history, msfo_release):
+        task, *_ = process_single_task(
+            "KBAKontur-1", history, 9, 18, 7 / 9, 7, msfo_release=msfo_release,
+        )
+        return task[READY_AT]
+
+    assert evaluate(events.iloc[:3], True) is None
+    assert evaluate(events, True) == pd.Timestamp("2026-01-15 09:00")
+    assert evaluate(events, False) == pd.Timestamp("2026-01-16 09:00")
+    for source, target in (
+        ("Протестировано", "Сдача-Приёмка"),
+        ("В тестировании", "Завершено"),
+    ):
+        direct = events.iloc[[0, 3]].copy()
+        direct.loc[3, ["removed_values", "added_values"]] = [source, target]
+        assert evaluate(direct, True) == pd.Timestamp("2026-01-15 09:00")

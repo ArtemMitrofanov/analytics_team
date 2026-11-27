@@ -31,9 +31,7 @@ def completed_in_period(
     return summary.loc[in_period].assign(**{READY_AT: dates.loc[in_period]})
 
 
-def comparison_values(
-    completed: pd.DataFrame, *, t_shirt: bool
-) -> dict[str, tuple[float, int]]:
+def comparison_values(completed: pd.DataFrame) -> dict[str, tuple[float, int]]:
     """Вернуть значение и число задач, вошедших в расчёт каждой метрики."""
     result = {COUNT_METRIC: (len(completed), len(completed))}
     if completed.empty:
@@ -46,10 +44,6 @@ def comparison_values(
         result[metric] = (values.mean(), int(values.count()))
 
     estimates = completed["task_size"].astype("string").str.strip()
-    if t_shirt:
-        values = estimates.str.upper().map(SIZES)
-    else:
-        values = pd.to_numeric(estimates.str.replace(",", ".", regex=False), errors="coerce")
-        values = values.replace([np.inf, -np.inf], np.nan).astype(float)
+    values = estimates.str.upper().map(SIZES)
     result[ESTIMATE_METRIC] = (values.mean(), int(values.count()))
     return result

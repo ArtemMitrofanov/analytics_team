@@ -17,7 +17,7 @@ import pandas as pd
 
 from config import (
     CREATION_SIZE_PROJECT, DEFAULT_DEDUCT_HOURS, DEFAULT_WORK_END, DEFAULT_WORK_START,
-    MONTH_NAMES_RU, TEAMS, team_display_label,
+    MONTH_NAMES_RU, TEAMS, is_msfo_team, team_display_label, uses_first_task_size,
 )
 from data.pipeline import PIPELINE_VERSION, process_all_tasks_cached
 from data.workflow import status_event_mask
@@ -237,6 +237,8 @@ def run_streamlit_app():
                 DEFAULT_WORK_START, DEFAULT_WORK_END, net_hours / window, net_hours,
                 pipeline_version=PIPELINE_VERSION, database_key=database_key,
                 team_id=compared_id, core_qa=teams[compared_id].qa,
+                first_task_size=uses_first_task_size(teams[compared_id]),
+                msfo_release=is_msfo_team(teams[compared_id]),
             )[0]
 
         render_team_comparison(
@@ -427,7 +429,7 @@ def run_streamlit_app():
     ) = process_all_tasks_cached(
         db_fingerprint, work_start_h, work_end_h, net_ratio, net_day_hours,
         pipeline_version=PIPELINE_VERSION, database_key=database_key,
-        team_id=team_id, core_qa=team.qa, _timings=timings,
+        team_id=team_id, core_qa=team.qa, first_task_size=uses_first_task_size(team), _timings=timings,
     )
     timings["pipeline"] = perf_counter() - pipeline_started
 

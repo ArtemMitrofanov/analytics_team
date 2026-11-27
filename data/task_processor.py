@@ -20,7 +20,7 @@ from data.workflow import (
     BUDGET_PROJECTS, BUDGET_READY_STATUSES,
     FINANCE_ACTIVE_STATUSES, FINANCE_EXTRA_STATUSES, FINANCE_PROJECT, FINANCE_STATUS_MAP,
     READY_AT, READY_CYCLE, READY_LEAD, READY_STAGE_COLUMNS, READY_STATUS, RELEASED_AT,
-    RELEASE_WAIT, STANDARD_STATUS_FIELDS,
+    RELEASE_WAIT, STANDARD_STATUS_FIELDS, msfo_release_transitions,
 )
 from utils.time_calc import get_work_minutes
 
@@ -83,23 +83,28 @@ def extract_task_priorities(task_df: pd.DataFrame) -> Dict[str, str]:
 
 
 def extract_task_estimates(
-    task_df: pd.DataFrame, *, project: str = ""
-) -> Dict[str, str]:
-    est = {
+    task_df: pd.DataFrame, *, project: str = "", first_task_size: bool = False
+) -> dict[str, str | int]:
+    est: dict[str, str | int] = {
         "an_plan": "", "an_fact": "",
         "dev_plan": "", "dev_fact": "",
         "qa_plan": "", "qa_fact": "",
         "task_size": ""
     }
     if project == CREATION_SIZE_PROJECT:
-        creation_sizes = task_df.loc[
-            task_df["activity_type"].eq("IssueCreatedActivityItem")
-            & task_df["changed_value"].eq("Size"),
-            ["timestamp", "added_values"],
-        ]
-        if not creation_sizes.empty:
-            initial_size = creation_sizes.sort_values("timestamp", kind="stable").iloc[0]
-            est["task_size"] = clean_val(initial_size["added_values"])
+        size_events = task_df["changed_value"].eq("Size")
+        if not first_task_size:
+            size_events &= task_df["activity_type"].eq("IssueCreatedActivityItem")
+        sizes = (
+            task_df.loc[size_events, ["timestamp", "added_values"]]
+            .sort_values("timestamp", kind="stable")["added_values"]
+            .map(clean_val)
+        )
+        if first_task_size:
+            sizes = sizes[sizes.ne("")].str.upper()
+            est["task_size_changes"] = max(0, int(sizes.ne(sizes.shift()).sum()) - 1)
+        if not sizes.empty:
+            est["task_size"] = sizes.iloc[0]
         return est
 
     sub = task_df[task_df['changed_value'].astype(str).str.contains('оценка|size|storypoints', case=False, na=False)].copy()
@@ -197,6 +202,8 @@ def process_single_task(
     net_day_hours: float = 7.0,
     *,
     core_qa: tuple[str, ...] = tuple(CORE_QA_TEAM),
+    first_task_size: bool = False,
+    msfo_release: bool = False,
 ) -> Tuple[Dict[str, Any], List[dict], List[dict], List[dict], List[dict], List[dict], List[dict], List[dict]]:
     """Обрабатывает всю историю задачи и вычисляет длительности по статусам и итерациям."""
     project = task_id.rpartition("-")[0]
@@ -239,6 +246,10 @@ def process_single_task(
 
     ready_statuses = (READY_STATUS, *BUDGET_READY_STATUSES) if project in BUDGET_PROJECTS else (READY_STATUS,)
     ready_at = first_status_time(ready_statuses)
+    if msfo_release:
+        extra_ready_dates = status_df.loc[msfo_release_transitions(status_df), "timestamp"]
+        if not extra_ready_dates.empty and (ready_at is None or extra_ready_dates.iloc[0] < ready_at):
+            ready_at = extra_ready_dates.iloc[0]
     analytics_started = first_status_time(STATUS_ANALYTICS_WAIT + STATUS_ANALYTICS_WORK, ready_at)
     lead_days = duration_days(analytics_started, ready_at)
     active_statuses = STATUS_ANALYTICS_WORK + STATUS_DEV_WORK + STATUS_QA_WORK
@@ -440,7 +451,7 @@ def process_single_task(
     # Метаданные
     task_row["Тип задачи"] = extract_task_type(task_df)
     task_row.update(extract_task_priorities(task_df))
-    task_row.update(extract_task_estimates(task_df, project=project))
+    task_row.update(extract_task_estimates(task_df, project=project, first_task_size=first_task_size))
     task_row.update(extract_task_deadlines(task_df, task_finished_at))
 
     return (

@@ -52,6 +52,16 @@ FINANCE_ACTIVE_STATUSES = ("Проектирование в работе", "Ре
 STANDARD_STATUS_FIELDS = ("Текущий статус", "State")
 
 
+def msfo_release_transitions(events: pd.DataFrame) -> pd.Series:
+    source = events["from_status"].str.strip("{} ").str.casefold()
+    target = events["to_status"].str.strip("{} ").str.casefold().str.replace("ё", "е", regex=False)
+    exits_tested = source.eq("протестировано") & ~target.isin(
+        ("", "протестировано", "к разработке", "в разработке")
+    )
+    direct_from_qa = source.eq("в тестировании") & target.isin(("сдача-приемка", "завершено"))
+    return exits_tested | direct_from_qa
+
+
 def status_event_mask(events: pd.DataFrame) -> pd.Series:
     task_col = "task_identifier" if "task_identifier" in events else "task_id"
     stages = events["changed_value"].eq("Stage")
